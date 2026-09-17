@@ -116,6 +116,30 @@ export type HistoricoAlteracao = {
   created_at: string;
 };
 
+export type LegendaCor = {
+  id: string;
+  empreendimento_id: string;
+  cor: string;
+  status: string;
+  created_at: string;
+};
+
+export type HistoricoUnidade = {
+  id: string;
+  unidade_id: string;
+  campo: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  usuario_id: string | null;
+  created_at: string;
+};
+
+export const CAMPO_UNIDADE_LABEL: Record<string, string> = {
+  status: "Status",
+  cor_legenda: "Cor",
+  numero: "Número",
+};
+
 // Placeholder mínimo para satisfazer o generic do supabase-js.
 // Pode ser substituído pelo `supabase gen types typescript` quando o projeto estiver linkado.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
