@@ -1,20 +1,30 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente, Empreendimento, Etapa, Unidade } from "@/lib/database.types";
+import { FiltrosClientes } from "./FiltrosClientes";
 
 function formatMoeda(valor: number | null) {
   if (valor == null) return "—";
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empreendimento?: string; etapa?: string }>;
+}) {
+  const { empreendimento: empreendimentoFiltro, etapa: etapaFiltro } = await searchParams;
   const supabase = await createClient();
+
+  let clientesQuery = supabase.from("clientes").select("*").eq("arquivado", false).order("nome");
+  if (empreendimentoFiltro) clientesQuery = clientesQuery.eq("empreendimento_id", empreendimentoFiltro);
+  if (etapaFiltro) clientesQuery = clientesQuery.eq("etapa_atual_id", etapaFiltro);
 
   const [{ data: etapas }, { data: clientes }, { data: empreendimentos }, { data: unidades }] =
     await Promise.all([
       supabase.from("etapas").select("*").order("ordem", { ascending: true }),
-      supabase.from("clientes").select("*").eq("arquivado", false).order("nome"),
-      supabase.from("empreendimentos").select("*"),
+      clientesQuery,
+      supabase.from("empreendimentos").select("*").order("nome"),
       supabase.from("unidades").select("*"),
     ]);
 
@@ -22,6 +32,9 @@ export default async function DashboardPage() {
     (empreendimentos ?? []).map((e: Empreendimento) => [e.id, e])
   );
   const unidadePorId = new Map<string, Unidade>((unidades ?? []).map((u: Unidade) => [u.id, u]));
+
+  const etapasTyped = (etapas as Etapa[] | null) ?? [];
+  const etapasExibidas = etapaFiltro ? etapasTyped.filter((e) => e.id === etapaFiltro) : etapasTyped;
 
   const clientesPorEtapa = new Map<string, Cliente[]>();
   for (const cliente of (clientes ?? []) as Cliente[]) {
@@ -47,8 +60,15 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
+      <FiltrosClientes
+        empreendimentos={(empreendimentos ?? []) as Empreendimento[]}
+        etapas={etapasTyped}
+        empreendimentoSelecionado={empreendimentoFiltro ?? ""}
+        etapaSelecionada={etapaFiltro ?? ""}
+      />
+
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {(etapas as Etapa[] | null)?.map((etapa) => {
+        {etapasExibidas.map((etapa) => {
           const clientesDaEtapa = clientesPorEtapa.get(etapa.id) ?? [];
           return (
             <div key={etapa.id} className="w-72 shrink-0 rounded-lg bg-slate-100 p-3">
@@ -58,7 +78,6 @@ export default async function DashboardPage() {
                   style={{ backgroundColor: etapa.cor }}
                 />
                 <h2 className="text-sm font-medium text-slate-700">{etapa.nome}</h2>
-                <span className="ml-auto text-xs text-slate-400">{clientesDaEtapa.length}</span>
               </div>
               <div className="space-y-2">
                 {clientesDaEtapa.map((cliente) => {
