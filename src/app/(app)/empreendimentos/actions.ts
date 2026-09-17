@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { parseEspelhoVendas } from "@/lib/espelhoVendas";
 import type { LegendaCor, Torre, Unidade } from "@/lib/database.types";
 
+type LeituraUnidade = {
+  torre: string;
+  numero: string;
+  status: string;
+  areaM2?: number | null;
+};
+
 export async function criarEmpreendimento(formData: FormData) {
   const supabase = await createClient();
 
@@ -30,15 +37,13 @@ export async function criarTorre(empreendimentoId: string, formData: FormData) {
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
 }
 
-const STATUS_VALIDOS = ["VENDIDA", "DISPONIVEL", "RESERVADA", "BLOQUEADA", "PERMUTA"];
-
 export async function criarUnidadesEmLote(
   empreendimentoId: string,
   torreId: string,
   formData: FormData
 ) {
   const supabase = await createClient();
-  const status = String(formData.get("status") ?? "DISPONIVEL");
+  const status = String(formData.get("status") ?? "");
   const numerosRaw = String(formData.get("numeros") ?? "");
 
   const numeros = numerosRaw
@@ -65,7 +70,7 @@ export async function atualizarStatusUnidade(
 ) {
   const supabase = await createClient();
   const status = String(formData.get("status") ?? "");
-  if (!STATUS_VALIDOS.includes(status)) return;
+  if (!status) return;
 
   await supabase.from("unidades").update({ status }).eq("id", unidadeId);
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
@@ -90,28 +95,14 @@ export async function removerLegendaCor(empreendimentoId: string, legendaId: str
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
 }
 
-export async function importarEspelhoVendas(empreendimentoId: string, formData: FormData) {
+// Cria as torres que faltam e grava/atualiza as unidades lidas, aproveitando o
+// gatilho do banco para logar automaticamente qualquer status/cor que tenha mudado
+// desde a última importação. Usado tanto pela importação de .xlsx quanto pela colagem
+// manual dos dados lidos de uma foto do espelho de vendas.
+async function aplicarLeituraEspelho(empreendimentoId: string, leituras: LeituraUnidade[]) {
   const supabase = await createClient();
-  const arquivo = formData.get("arquivo") as File | null;
 
-  if (!arquivo || arquivo.size === 0) {
-    redirect(
-      `/empreendimentos/${empreendimentoId}?erroImportacao=${encodeURIComponent("Selecione um arquivo .xlsx")}`
-    );
-  }
-
-  const buffer = await arquivo.arrayBuffer();
-  const celulas = await parseEspelhoVendas(buffer);
-
-  const { data: legendas } = await supabase
-    .from("legendas_cores")
-    .select("*")
-    .eq("empreendimento_id", empreendimentoId);
-  const statusPorCor = new Map<string, string>(
-    ((legendas ?? []) as LegendaCor[]).map((l) => [l.cor.toUpperCase(), l.status])
-  );
-
-  const nomesTorres = Array.from(new Set(celulas.map((c) => c.torre)));
+  const nomesTorres = Array.from(new Set(leituras.map((l) => l.torre)));
   const { data: torresExistentes } = await supabase
     .from("torres")
     .select("id, nome")
@@ -133,25 +124,18 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
     }
   }
 
-  const coresDesconhecidas = new Set<string>();
-  const linhasParaGravar: { torre_id: string; numero: string; status: string; cor_legenda: string }[] = [];
-
-  for (const celula of celulas) {
-    if (!celula.cor) continue;
-    const status = statusPorCor.get(celula.cor.toUpperCase());
-    if (!status) {
-      coresDesconhecidas.add(celula.cor);
-      continue;
-    }
-    const torreId = torreIdPorNome.get(celula.torre);
-    if (!torreId) continue;
-    linhasParaGravar.push({ torre_id: torreId, numero: celula.numero, status, cor_legenda: celula.cor });
-  }
+  const linhasParaGravar = leituras
+    .map((l) => {
+      const torreId = torreIdPorNome.get(l.torre);
+      if (!torreId) return null;
+      return { torre_id: torreId, numero: l.numero, status: l.status, area_m2: l.areaM2 ?? null };
+    })
+    .filter((l): l is NonNullable<typeof l> => l !== null);
 
   const torreIds = Array.from(torreIdPorNome.values());
   const { data: existentes } =
     torreIds.length > 0
-      ? await supabase.from("unidades").select("torre_id, numero, status, cor_legenda").in("torre_id", torreIds)
+      ? await supabase.from("unidades").select("torre_id, numero, status, area_m2").in("torre_id", torreIds)
       : { data: [] as Unidade[] };
 
   const existentesPorChave = new Map<string, Unidade>(
@@ -163,7 +147,7 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
   for (const linha of linhasParaGravar) {
     const existente = existentesPorChave.get(`${linha.torre_id}:${linha.numero}`);
     if (!existente) criadas++;
-    else if (existente.status !== linha.status || existente.cor_legenda !== linha.cor_legenda) atualizadas++;
+    else if (existente.status !== linha.status || existente.area_m2 !== linha.area_m2) atualizadas++;
   }
 
   if (linhasParaGravar.length > 0) {
@@ -172,14 +156,79 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
 
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
 
+  return { total: linhasParaGravar.length, criadas, atualizadas };
+}
+
+export async function importarEspelhoVendas(empreendimentoId: string, formData: FormData) {
+  const supabase = await createClient();
+  const arquivo = formData.get("arquivo") as File | null;
+
+  if (!arquivo || arquivo.size === 0) {
+    redirect(
+      `/empreendimentos/${empreendimentoId}?erroImportacao=${encodeURIComponent("Selecione um arquivo .xlsx")}`
+    );
+  }
+
+  const buffer = await arquivo.arrayBuffer();
+  const celulas = await parseEspelhoVendas(buffer);
+
+  const { data: legendas } = await supabase
+    .from("legendas_cores")
+    .select("*")
+    .eq("empreendimento_id", empreendimentoId);
+  const statusPorCor = new Map<string, string>(
+    ((legendas ?? []) as LegendaCor[]).map((l) => [l.cor.toUpperCase(), l.status])
+  );
+
+  const coresDesconhecidas = new Set<string>();
+  const leituras: LeituraUnidade[] = [];
+  for (const celula of celulas) {
+    if (!celula.cor) continue;
+    const status = statusPorCor.get(celula.cor.toUpperCase());
+    if (!status) {
+      coresDesconhecidas.add(celula.cor);
+      continue;
+    }
+    leituras.push({ torre: celula.torre, numero: celula.numero, status });
+  }
+
+  const resultado = await aplicarLeituraEspelho(empreendimentoId, leituras);
+
   const params = new URLSearchParams({
     importado: "1",
-    total: String(linhasParaGravar.length),
-    criadas: String(criadas),
-    atualizadas: String(atualizadas),
+    total: String(resultado.total),
+    criadas: String(resultado.criadas),
+    atualizadas: String(resultado.atualizadas),
   });
   if (coresDesconhecidas.size > 0) {
     params.set("desconhecidas", Array.from(coresDesconhecidas).join(","));
   }
+  redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
+}
+
+// Colagem manual: uma linha por unidade, no formato "Bloco;Número;Status;Área(opcional)".
+// Usado quando os dados vêm de uma foto do espelho de vendas lida manualmente (por mim ou pelo analista),
+// em vez de um arquivo .xlsx com cores nas células.
+export async function importarLeituraManual(empreendimentoId: string, formData: FormData) {
+  const texto = String(formData.get("linhas") ?? "");
+
+  const leituras: LeituraUnidade[] = texto
+    .split("\n")
+    .map((linha) => linha.trim())
+    .filter(Boolean)
+    .map((linha) => {
+      const [torre, numero, status, area] = linha.split(";").map((v) => v.trim());
+      return { torre, numero, status, areaM2: area ? Number(area.replace(",", ".")) : null };
+    })
+    .filter((l) => l.torre && l.numero && l.status);
+
+  const resultado = await aplicarLeituraEspelho(empreendimentoId, leituras);
+
+  const params = new URLSearchParams({
+    importado: "1",
+    total: String(resultado.total),
+    criadas: String(resultado.criadas),
+    atualizadas: String(resultado.atualizadas),
+  });
   redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
 }

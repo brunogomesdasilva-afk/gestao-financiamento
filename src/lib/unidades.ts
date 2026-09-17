@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Empreendimento, Torre, Unidade } from "@/lib/database.types";
+import { STATUS_VENDIDO, type Cliente, type Empreendimento, type Torre, type Unidade } from "@/lib/database.types";
 
-// Unidades com status VENDIDA que ainda não têm cliente vinculado (mais, opcionalmente, uma unidade específica já vinculada)
+// Unidades vendidas que ainda não têm cliente vinculado (mais, opcionalmente, uma unidade específica já vinculada)
 export async function getEmpreendimentosTorresEUnidadesDisponiveis(unidadeJaVinculadaId?: string) {
   const supabase = await createClient();
 
@@ -9,7 +9,7 @@ export async function getEmpreendimentosTorresEUnidadesDisponiveis(unidadeJaVinc
     await Promise.all([
       supabase.from("empreendimentos").select("*").order("nome"),
       supabase.from("torres").select("*").order("nome"),
-      supabase.from("unidades").select("*").eq("status", "VENDIDA").order("numero"),
+      supabase.from("unidades").select("*").eq("status", STATUS_VENDIDO).order("numero"),
       supabase.from("clientes").select("unidade_id").not("unidade_id", "is", null),
     ]);
 

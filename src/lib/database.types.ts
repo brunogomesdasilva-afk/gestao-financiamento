@@ -27,18 +27,25 @@ export type Torre = {
   created_at: string;
 };
 
-export type StatusUnidade = "VENDIDA" | "DISPONIVEL" | "RESERVADA" | "BLOQUEADA" | "PERMUTA" | string;
+export type StatusUnidadeConfig = {
+  nome: string;
+  cor: string;
+  ordem: number;
+};
 
 export type Unidade = {
   id: string;
   torre_id: string;
   numero: string;
-  status: StatusUnidade;
+  status: string;
   cor_legenda: string | null;
+  area_m2: number | null;
   observacoes: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export const STATUS_VENDIDO = "Vendido";
 
 export type ModalidadeFinanciamento = {
   id: string;

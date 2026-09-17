@@ -1,32 +1,17 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Empreendimento, LegendaCor, Torre, Unidade } from "@/lib/database.types";
+import type { Cliente, Empreendimento, LegendaCor, StatusUnidadeConfig, Torre, Unidade } from "@/lib/database.types";
 import {
   atualizarStatusUnidade,
   criarLegendaCor,
   criarTorre,
   criarUnidadesEmLote,
   importarEspelhoVendas,
+  importarLeituraManual,
   removerLegendaCor,
 } from "../actions";
 import { UnidadeStatusForm } from "../UnidadeStatusForm";
-
-const STATUS_LABEL: Record<string, string> = {
-  VENDIDA: "Vendida",
-  DISPONIVEL: "Disponível",
-  RESERVADA: "Reservada",
-  BLOQUEADA: "Bloqueada",
-  PERMUTA: "Permuta",
-};
-
-const STATUS_COR: Record<string, string> = {
-  VENDIDA: "bg-red-100 text-red-700 border-red-200",
-  DISPONIVEL: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  RESERVADA: "bg-amber-100 text-amber-700 border-amber-200",
-  BLOQUEADA: "bg-slate-200 text-slate-600 border-slate-300",
-  PERMUTA: "bg-sky-100 text-sky-700 border-sky-200",
-};
 
 export default async function EmpreendimentoDetalhePage({
   params,
@@ -46,24 +31,33 @@ export default async function EmpreendimentoDetalhePage({
   const sp = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: empreendimento }, { data: torres }, { data: unidades }, { data: clientes }, { data: legendas }] =
-    await Promise.all([
-      supabase.from("empreendimentos").select("*").eq("id", id).single(),
-      supabase.from("torres").select("*").eq("empreendimento_id", id).order("nome"),
-      supabase
-        .from("unidades")
-        .select("*, torres!inner(empreendimento_id)")
-        .eq("torres.empreendimento_id", id)
-        .order("numero"),
-      supabase.from("clientes").select("*").eq("empreendimento_id", id),
-      supabase.from("legendas_cores").select("*").eq("empreendimento_id", id),
-    ]);
+  const [
+    { data: empreendimento },
+    { data: torres },
+    { data: unidades },
+    { data: clientes },
+    { data: legendas },
+    { data: statusUnidade },
+  ] = await Promise.all([
+    supabase.from("empreendimentos").select("*").eq("id", id).single(),
+    supabase.from("torres").select("*").eq("empreendimento_id", id).order("nome"),
+    supabase
+      .from("unidades")
+      .select("*, torres!inner(empreendimento_id)")
+      .eq("torres.empreendimento_id", id)
+      .order("numero"),
+    supabase.from("clientes").select("*").eq("empreendimento_id", id),
+    supabase.from("legendas_cores").select("*").eq("empreendimento_id", id),
+    supabase.from("status_unidade").select("*").order("ordem"),
+  ]);
 
   if (!empreendimento) notFound();
   const empreendimentoTyped = empreendimento as Empreendimento;
   const torresTyped = (torres ?? []) as Torre[];
   const unidadesTyped = (unidades ?? []) as Unidade[];
   const legendasTyped = (legendas ?? []) as LegendaCor[];
+  const statusOpcoes = (statusUnidade ?? []) as StatusUnidadeConfig[];
+  const statusPorNome = new Map<string, StatusUnidadeConfig>(statusOpcoes.map((s) => [s.nome, s]));
   const clientePorUnidade = new Map<string, Cliente>(
     ((clientes ?? []) as Cliente[])
       .filter((c) => c.unidade_id)
@@ -116,12 +110,12 @@ export default async function EmpreendimentoDetalhePage({
                 <div className="mt-4 flex flex-wrap gap-2">
                   {unidadesDaTorre.map((unidade) => {
                     const cliente = clientePorUnidade.get(unidade.id);
+                    const cor = statusPorNome.get(unidade.status)?.cor ?? "#94A3B8";
                     return (
                       <div
                         key={unidade.id}
-                        className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium ${
-                          STATUS_COR[unidade.status] ?? "bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
+                        className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-white"
+                        style={{ backgroundColor: cor, borderColor: cor }}
                         title={cliente ? `Cliente: ${cliente.nome}` : undefined}
                       >
                         <Link
@@ -130,8 +124,10 @@ export default async function EmpreendimentoDetalhePage({
                         >
                           {unidade.numero}
                         </Link>
+                        {unidade.area_m2 != null && <span className="opacity-80">{unidade.area_m2}m²</span>}
                         <UnidadeStatusForm
                           status={unidade.status}
+                          opcoes={statusOpcoes}
                           action={atualizarStatusUnidade.bind(null, id, unidade.id)}
                         />
                         {cliente && (
@@ -164,12 +160,12 @@ export default async function EmpreendimentoDetalhePage({
                     <div className="flex items-center gap-2">
                       <select
                         name="status"
-                        defaultValue="DISPONIVEL"
+                        defaultValue={statusOpcoes[0]?.nome}
                         className="rounded-md border border-slate-300 px-3 py-2 text-sm"
                       >
-                        {Object.entries(STATUS_LABEL).map(([valor, label]) => (
-                          <option key={valor} value={valor}>
-                            {label}
+                        {statusOpcoes.map((opcao) => (
+                          <option key={opcao.nome} value={opcao.nome}>
+                            {opcao.nome}
                           </option>
                         ))}
                       </select>
@@ -227,7 +223,7 @@ export default async function EmpreendimentoDetalhePage({
                   />
                   <span className="text-slate-600">{legenda.cor}</span>
                   <span className="text-slate-400">→</span>
-                  <span className="flex-1 text-slate-900">{STATUS_LABEL[legenda.status] ?? legenda.status}</span>
+                  <span className="flex-1 text-slate-900">{legenda.status}</span>
                   <form action={removerLegendaCor.bind(null, id, legenda.id)}>
                     <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
                       remover
@@ -252,9 +248,9 @@ export default async function EmpreendimentoDetalhePage({
               <div className="flex-1">
                 <label className="block text-xs font-medium text-slate-700">Status</label>
                 <select name="status" className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                  {Object.entries(STATUS_LABEL).map(([valor, label]) => (
-                    <option key={valor} value={valor}>
-                      {label}
+                  {statusOpcoes.map((opcao) => (
+                    <option key={opcao.nome} value={opcao.nome}>
+                      {opcao.nome}
                     </option>
                   ))}
                 </select>
@@ -269,26 +265,42 @@ export default async function EmpreendimentoDetalhePage({
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="text-sm font-semibold text-slate-900">Importar espelho de vendas</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Importar espelho de vendas (.xlsx)</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Envie a planilha .xlsx colorida. Cada cor é convertida em status conforme a legenda acima;
-              torres são identificadas pelo nome da aba da planilha. Pode ser reenviada quantas vezes
-              precisar — só as unidades com status ou cor diferentes do último envio geram uma nova
-              entrada no histórico.
+              Envie a planilha colorida. Cada cor é convertida em status conforme a legenda acima; torres
+              são identificadas pelo nome da aba da planilha. Pode ser reenviada quantas vezes precisar —
+              só as unidades com status ou cor diferentes do último envio geram uma nova entrada no
+              histórico.
             </p>
             <form action={importarEspelhoVendas.bind(null, id)} className="mt-4 space-y-3">
-              <input
-                type="file"
-                name="arquivo"
-                accept=".xlsx"
-                required
-                className="w-full text-sm"
-              />
+              <input type="file" name="arquivo" accept=".xlsx" required className="w-full text-sm" />
               <button
                 type="submit"
                 className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
               >
                 Importar
+              </button>
+            </form>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-6">
+            <h2 className="text-sm font-semibold text-slate-900">Colar leitura de foto</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Quando os dados vêm de uma foto do espelho (lida manualmente), cole uma linha por unidade no
+              formato <code>Bloco;Número;Status;Área(opcional)</code>.
+            </p>
+            <form action={importarLeituraManual.bind(null, id)} className="mt-4 space-y-3">
+              <textarea
+                name="linhas"
+                rows={5}
+                placeholder={"Bloco 2;1307;Vendido;39\nBloco 1;2012;Permuta;39"}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-mono text-xs"
+              />
+              <button
+                type="submit"
+                className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Gravar
               </button>
             </form>
           </div>
