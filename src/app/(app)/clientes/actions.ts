@@ -10,6 +10,33 @@ function parseValor(raw: FormDataEntryValue | null) {
   return Number.isFinite(num) ? num : null;
 }
 
+function texto(formData: FormData, campo: string) {
+  return String(formData.get(campo) ?? "") || null;
+}
+
+function dadosDoFormulario(formData: FormData) {
+  return {
+    nome: String(formData.get("nome") ?? ""),
+    cpf: texto(formData, "cpf"),
+    telefone: texto(formData, "telefone"),
+    email: texto(formData, "email"),
+    banco_financiador: texto(formData, "banco_financiador"),
+    agencia_financiamento: texto(formData, "agencia_financiamento"),
+    modalidade_financiamento_id: texto(formData, "modalidade_financiamento_id"),
+    fgts_contratado: parseValor(formData.get("fgts_contratado")),
+    financiamento_contratado: parseValor(formData.get("financiamento_contratado")),
+    fgts_atualizacao: parseValor(formData.get("fgts_atualizacao")),
+    valor_aprovado: parseValor(formData.get("valor_aprovado")),
+    terreno: parseValor(formData.get("terreno")),
+    seguro: parseValor(formData.get("seguro")),
+    escritura: parseValor(formData.get("escritura")),
+    validade: texto(formData, "validade"),
+    corretor_responsavel_id: texto(formData, "corretor_responsavel_id"),
+    analista_responsavel_id: texto(formData, "analista_responsavel_id"),
+    observacoes: texto(formData, "observacoes"),
+  };
+}
+
 async function empreendimentoIdDaUnidade(
   supabase: Awaited<ReturnType<typeof createClient>>,
   unidadeId: string | null
@@ -40,17 +67,10 @@ export async function criarCliente(formData: FormData) {
   const { data: cliente, error } = await supabase
     .from("clientes")
     .insert({
-      nome: String(formData.get("nome") ?? ""),
-      cpf: String(formData.get("cpf") ?? "") || null,
-      telefone: String(formData.get("telefone") ?? "") || null,
-      email: String(formData.get("email") ?? "") || null,
+      ...dadosDoFormulario(formData),
       empreendimento_id: empreendimentoId,
       unidade_id: unidadeId,
-      banco_financiador: String(formData.get("banco_financiador") ?? "") || null,
-      valor_financiado: parseValor(formData.get("valor_financiado")),
-      corretor_responsavel_id: String(formData.get("corretor_responsavel_id") ?? "") || null,
       etapa_atual_id: primeiraEtapa?.id ?? null,
-      observacoes: String(formData.get("observacoes") ?? "") || null,
     })
     .select("id")
     .single();
@@ -85,16 +105,9 @@ export async function atualizarCliente(clienteId: string, formData: FormData) {
   const { error } = await supabase
     .from("clientes")
     .update({
-      nome: String(formData.get("nome") ?? ""),
-      cpf: String(formData.get("cpf") ?? "") || null,
-      telefone: String(formData.get("telefone") ?? "") || null,
-      email: String(formData.get("email") ?? "") || null,
+      ...dadosDoFormulario(formData),
       empreendimento_id: empreendimentoId,
       unidade_id: unidadeId,
-      banco_financiador: String(formData.get("banco_financiador") ?? "") || null,
-      valor_financiado: parseValor(formData.get("valor_financiado")),
-      corretor_responsavel_id: String(formData.get("corretor_responsavel_id") ?? "") || null,
-      observacoes: String(formData.get("observacoes") ?? "") || null,
     })
     .eq("id", clienteId);
 

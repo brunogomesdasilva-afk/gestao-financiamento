@@ -1,7 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { AndamentoHistorico, Cliente, Empreendimento, Etapa, Profile, Torre, Unidade } from "@/lib/database.types";
+import {
+  CAMPO_LABEL,
+  type AndamentoHistorico,
+  type Cliente,
+  type Empreendimento,
+  type Etapa,
+  type HistoricoAlteracao,
+  type ModalidadeFinanciamento,
+  type Profile,
+  type Torre,
+  type Unidade,
+} from "@/lib/database.types";
 import { avancarEtapa, arquivarCliente } from "../actions";
 
 function formatMoeda(valor: number | null) {
@@ -13,6 +24,11 @@ function formatData(data: string) {
   return new Date(data).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function formatDataCurta(data: string | null) {
+  if (!data) return "—";
+  return new Date(data).toLocaleDateString("pt-BR", { dateStyle: "short" });
+}
+
 export default async function ClienteDetalhePage({
   params,
 }: {
@@ -21,7 +37,14 @@ export default async function ClienteDetalhePage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: cliente }, { data: etapas }, { data: historico }, { data: usuarios }] = await Promise.all([
+  const [
+    { data: cliente },
+    { data: etapas },
+    { data: historico },
+    { data: usuarios },
+    { data: modalidades },
+    { data: alteracoes },
+  ] = await Promise.all([
     supabase.from("clientes").select("*").eq("id", id).single(),
     supabase.from("etapas").select("*").order("ordem", { ascending: true }),
     supabase
@@ -30,6 +53,12 @@ export default async function ClienteDetalhePage({
       .eq("cliente_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("*"),
+    supabase.from("modalidades_financiamento").select("*"),
+    supabase
+      .from("historico_alteracoes")
+      .select("*")
+      .eq("cliente_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (!cliente) notFound();
@@ -64,6 +93,9 @@ export default async function ClienteDetalhePage({
   const etapasTyped = (etapas ?? []) as Etapa[];
   const etapaAtual = etapasTyped.find((e) => e.id === clienteTyped.etapa_atual_id);
   const usuariosPorId = new Map<string, Profile>((usuarios ?? []).map((u: Profile) => [u.id, u]));
+  const modalidadesPorId = new Map<string, ModalidadeFinanciamento>(
+    ((modalidades ?? []) as ModalidadeFinanciamento[]).map((m) => [m.id, m])
+  );
 
   const avancarEtapaComId = avancarEtapa.bind(null, id);
   const arquivarComId = arquivarCliente.bind(null, id, !clienteTyped.arquivado);
@@ -108,7 +140,10 @@ export default async function ClienteDetalhePage({
             </div>
           )}
 
-          <dl className="mt-6 grid grid-cols-2 gap-4 text-sm">
+          <h2 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Dados pessoais
+          </h2>
+          <dl className="mt-2 grid grid-cols-2 gap-4 text-sm">
             <div>
               <dt className="text-slate-400">CPF</dt>
               <dd className="text-slate-900">{clienteTyped.cpf ?? "—"}</dd>
@@ -121,14 +156,70 @@ export default async function ClienteDetalhePage({
               <dt className="text-slate-400">E-mail</dt>
               <dd className="text-slate-900">{clienteTyped.email ?? "—"}</dd>
             </div>
+          </dl>
+
+          <h2 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Financiamento
+          </h2>
+          <dl className="mt-2 grid grid-cols-2 gap-4 text-sm">
             <div>
               <dt className="text-slate-400">Banco financiador</dt>
               <dd className="text-slate-900">{clienteTyped.banco_financiador ?? "—"}</dd>
             </div>
             <div>
-              <dt className="text-slate-400">Valor financiado</dt>
-              <dd className="text-slate-900">{formatMoeda(clienteTyped.valor_financiado)}</dd>
+              <dt className="text-slate-400">Agência</dt>
+              <dd className="text-slate-900">{clienteTyped.agencia_financiamento ?? "—"}</dd>
             </div>
+            <div>
+              <dt className="text-slate-400">Modalidade</dt>
+              <dd className="text-slate-900">
+                {clienteTyped.modalidade_financiamento_id
+                  ? modalidadesPorId.get(clienteTyped.modalidade_financiamento_id)?.nome ?? "—"
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Validade da aprovação</dt>
+              <dd className="text-slate-900">{formatDataCurta(clienteTyped.validade)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Financiamento contratado</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.financiamento_contratado)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Valor aprovado</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.valor_aprovado)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Diferença (aprovado − contratado)</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.diferenca_aprovacao_contratado)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">FGTS contratado</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.fgts_contratado)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">FGTS atualização</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.fgts_atualizacao)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Terreno</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.terreno)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Seguro</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.seguro)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Escritura</dt>
+              <dd className="text-slate-900">{formatMoeda(clienteTyped.escritura)}</dd>
+            </div>
+          </dl>
+
+          <h2 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Responsáveis
+          </h2>
+          <dl className="mt-2 grid grid-cols-2 gap-4 text-sm">
             <div>
               <dt className="text-slate-400">Corretor responsável</dt>
               <dd className="text-slate-900">
@@ -137,11 +228,19 @@ export default async function ClienteDetalhePage({
                   : "—"}
               </dd>
             </div>
+            <div>
+              <dt className="text-slate-400">Analista responsável</dt>
+              <dd className="text-slate-900">
+                {clienteTyped.analista_responsavel_id
+                  ? usuariosPorId.get(clienteTyped.analista_responsavel_id)?.nome ?? "—"
+                  : "—"}
+              </dd>
+            </div>
           </dl>
 
           {clienteTyped.observacoes && (
-            <div className="mt-4">
-              <dt className="text-sm text-slate-400">Observações</dt>
+            <div className="mt-6">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Observações</dt>
               <dd className="mt-1 text-sm text-slate-700">{clienteTyped.observacoes}</dd>
             </div>
           )}
@@ -169,6 +268,33 @@ export default async function ClienteDetalhePage({
             )}
           </ol>
         </div>
+
+        <details className="rounded-xl border border-slate-200 bg-white p-6">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+            Histórico de alterações de campos ({(alteracoes ?? []).length})
+          </summary>
+          <ol className="mt-4 space-y-3">
+            {((alteracoes ?? []) as HistoricoAlteracao[]).map((item) => {
+              const usuario = item.usuario_id ? usuariosPorId.get(item.usuario_id) : null;
+              return (
+                <li key={item.id} className="border-l-2 border-slate-200 pl-4 text-sm">
+                  <p className="text-slate-900">
+                    <span className="font-medium">{CAMPO_LABEL[item.campo] ?? item.campo}</span>{" "}
+                    alterado de <span className="text-slate-500">&ldquo;{item.valor_anterior ?? "—"}&rdquo;</span> para{" "}
+                    <span className="text-slate-700">&ldquo;{item.valor_novo ?? "—"}&rdquo;</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {formatData(item.created_at)}
+                    {usuario ? ` · ${usuario.nome}` : ""}
+                  </p>
+                </li>
+              );
+            })}
+            {(alteracoes ?? []).length === 0 && (
+              <p className="text-sm text-slate-400">Nenhuma alteração registrada ainda.</p>
+            )}
+          </ol>
+        </details>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">

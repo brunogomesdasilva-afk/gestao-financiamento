@@ -80,7 +80,7 @@ export default async function DashboardPage() {
                         </p>
                       )}
                       <p className="mt-1 text-xs text-slate-400">
-                        {formatMoeda(cliente.valor_financiado)}
+                        {formatMoeda(cliente.financiamento_contratado)}
                       </p>
                     </Link>
                   );

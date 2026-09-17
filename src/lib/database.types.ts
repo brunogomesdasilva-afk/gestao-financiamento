@@ -40,6 +40,12 @@ export type Unidade = {
   updated_at: string;
 };
 
+export type ModalidadeFinanciamento = {
+  id: string;
+  nome: string;
+  ordem: number;
+};
+
 export type Cliente = {
   id: string;
   nome: string;
@@ -49,8 +55,19 @@ export type Cliente = {
   empreendimento_id: string | null;
   unidade_id: string | null;
   banco_financiador: string | null;
-  valor_financiado: number | null;
+  agencia_financiamento: string | null;
+  modalidade_financiamento_id: string | null;
+  fgts_contratado: number | null;
+  financiamento_contratado: number | null;
+  fgts_atualizacao: number | null;
+  valor_aprovado: number | null;
+  diferenca_aprovacao_contratado: number | null;
+  terreno: number | null;
+  seguro: number | null;
+  escritura: number | null;
+  validade: string | null;
   corretor_responsavel_id: string | null;
+  analista_responsavel_id: string | null;
   etapa_atual_id: string | null;
   observacoes: string | null;
   arquivado: boolean;
@@ -63,6 +80,38 @@ export type AndamentoHistorico = {
   cliente_id: string;
   etapa_id: string | null;
   observacao: string | null;
+  usuario_id: string | null;
+  created_at: string;
+};
+
+export const CAMPO_LABEL: Record<string, string> = {
+  nome: "Nome",
+  cpf: "CPF",
+  telefone: "Telefone",
+  email: "E-mail",
+  unidade_id: "Unidade",
+  banco_financiador: "Banco financiador",
+  agencia_financiamento: "Agência do financiamento",
+  modalidade_financiamento_id: "Modalidade do financiamento",
+  fgts_contratado: "FGTS contratado",
+  financiamento_contratado: "Financiamento contratado",
+  fgts_atualizacao: "FGTS atualização",
+  valor_aprovado: "Valor aprovado",
+  terreno: "Terreno",
+  seguro: "Seguro",
+  escritura: "Escritura",
+  validade: "Validade",
+  corretor_responsavel_id: "Corretor responsável",
+  analista_responsavel_id: "Analista responsável",
+  observacoes: "Observações",
+};
+
+export type HistoricoAlteracao = {
+  id: string;
+  cliente_id: string;
+  campo: string;
+  valor_anterior: string | null;
+  valor_novo: string | null;
   usuario_id: string | null;
   created_at: string;
 };
