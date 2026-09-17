@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { AndamentoHistorico, Cliente, Empreendimento, Etapa, Profile } from "@/lib/database.types";
+import type { AndamentoHistorico, Cliente, Empreendimento, Etapa, Profile, Torre, Unidade } from "@/lib/database.types";
 import { avancarEtapa, arquivarCliente } from "../actions";
 
 function formatMoeda(valor: number | null) {
@@ -46,6 +46,21 @@ export default async function ClienteDetalhePage({
     empreendimento = data;
   }
 
+  let unidade: Unidade | null = null;
+  let torre: Torre | null = null;
+  if (clienteTyped.unidade_id) {
+    const { data } = await supabase.from("unidades").select("*").eq("id", clienteTyped.unidade_id).single();
+    unidade = data;
+    if (unidade) {
+      const { data: torreData } = await supabase
+        .from("torres")
+        .select("*")
+        .eq("id", unidade.torre_id)
+        .single();
+      torre = torreData;
+    }
+  }
+
   const etapasTyped = (etapas ?? []) as Etapa[];
   const etapaAtual = etapasTyped.find((e) => e.id === clienteTyped.etapa_atual_id);
   const usuariosPorId = new Map<string, Profile>((usuarios ?? []).map((u: Profile) => [u.id, u]));
@@ -63,7 +78,8 @@ export default async function ClienteDetalhePage({
               {empreendimento && (
                 <p className="text-sm text-slate-500">
                   {empreendimento.nome}
-                  {clienteTyped.unidade ? ` · Unidade ${clienteTyped.unidade}` : ""}
+                  {torre ? ` · ${torre.nome}` : ""}
+                  {unidade ? ` · Unidade ${unidade.numero}` : ""}
                 </p>
               )}
             </div>

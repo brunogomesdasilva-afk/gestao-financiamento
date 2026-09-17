@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Empreendimento, Profile } from "@/lib/database.types";
+import type { Cliente, Profile } from "@/lib/database.types";
+import { getEmpreendimentosTorresEUnidadesDisponiveis } from "@/lib/unidades";
 import { atualizarCliente } from "../../actions";
+import { SeletorUnidade } from "../../SeletorUnidade";
 
 export default async function EditarClientePage({
   params,
@@ -14,14 +16,16 @@ export default async function EditarClientePage({
   const { erro } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cliente }, { data: empreendimentos }, { data: corretores }] = await Promise.all([
+  const [{ data: cliente }, { data: corretores }] = await Promise.all([
     supabase.from("clientes").select("*").eq("id", id).single(),
-    supabase.from("empreendimentos").select("*").order("nome"),
     supabase.from("profiles").select("*").order("nome"),
   ]);
 
   if (!cliente) notFound();
   const clienteTyped = cliente as Cliente;
+  const { empreendimentos, torres, unidades } = await getEmpreendimentosTorresEUnidadesDisponiveis(
+    clienteTyped.unidade_id ?? undefined
+  );
   const atualizarComId = atualizarCliente.bind(null, id);
 
   return (
@@ -51,20 +55,13 @@ export default async function EditarClientePage({
             <input name="email" type="email" defaultValue={clienteTyped.email ?? ""} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Empreendimento</label>
-            <select name="empreendimento_id" defaultValue={clienteTyped.empreendimento_id ?? ""} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="">Selecione</option>
-              {(empreendimentos as Empreendimento[] | null)?.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Unidade</label>
-            <input name="unidade" defaultValue={clienteTyped.unidade ?? ""} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          <div className="col-span-2">
+            <SeletorUnidade
+              empreendimentos={empreendimentos}
+              torres={torres}
+              unidades={unidades}
+              unidadeSelecionadaId={clienteTyped.unidade_id}
+            />
           </div>
 
           <div>

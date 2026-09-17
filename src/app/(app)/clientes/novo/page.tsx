@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Empreendimento, Profile } from "@/lib/database.types";
+import type { Profile } from "@/lib/database.types";
+import { getEmpreendimentosTorresEUnidadesDisponiveis } from "@/lib/unidades";
 import { criarCliente } from "../actions";
+import { SeletorUnidade } from "../SeletorUnidade";
 
 export default async function NovoClientePage({
   searchParams,
@@ -10,8 +12,8 @@ export default async function NovoClientePage({
   const { erro } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: empreendimentos }, { data: corretores }] = await Promise.all([
-    supabase.from("empreendimentos").select("*").order("nome"),
+  const [{ empreendimentos, torres, unidades }, { data: corretores }] = await Promise.all([
+    getEmpreendimentosTorresEUnidadesDisponiveis(),
     supabase.from("profiles").select("*").order("nome"),
   ]);
 
@@ -19,7 +21,8 @@ export default async function NovoClientePage({
     <div className="mx-auto max-w-2xl">
       <h1 className="text-lg font-semibold text-slate-900">Novo cliente</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Cadastre um cliente já aprovado para acompanhar o andamento do financiamento.
+        Cadastre um cliente já aprovado para acompanhar o andamento do financiamento. Só aparecem
+        unidades com status <strong>Vendida</strong> que ainda não têm cliente vinculado.
       </p>
 
       {erro && (
@@ -45,20 +48,8 @@ export default async function NovoClientePage({
             <input name="email" type="email" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Empreendimento</label>
-            <select name="empreendimento_id" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="">Selecione</option>
-              {(empreendimentos as Empreendimento[] | null)?.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700">Unidade</label>
-            <input name="unidade" placeholder="Apto 101, Lote 5..." className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          <div className="col-span-2">
+            <SeletorUnidade empreendimentos={empreendimentos} torres={torres} unidades={unidades} />
           </div>
 
           <div>

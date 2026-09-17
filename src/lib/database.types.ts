@@ -20,6 +20,26 @@ export type Etapa = {
   cor: string;
 };
 
+export type Torre = {
+  id: string;
+  empreendimento_id: string;
+  nome: string;
+  created_at: string;
+};
+
+export type StatusUnidade = "VENDIDA" | "DISPONIVEL" | "RESERVADA" | "BLOQUEADA" | "PERMUTA" | string;
+
+export type Unidade = {
+  id: string;
+  torre_id: string;
+  numero: string;
+  status: StatusUnidade;
+  cor_legenda: string | null;
+  observacoes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Cliente = {
   id: string;
   nome: string;
@@ -27,7 +47,7 @@ export type Cliente = {
   telefone: string | null;
   email: string | null;
   empreendimento_id: string | null;
-  unidade: string | null;
+  unidade_id: string | null;
   banco_financiador: string | null;
   valor_financiado: number | null;
   corretor_responsavel_id: string | null;

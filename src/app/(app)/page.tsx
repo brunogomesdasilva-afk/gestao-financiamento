@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Empreendimento, Etapa } from "@/lib/database.types";
+import type { Cliente, Empreendimento, Etapa, Unidade } from "@/lib/database.types";
 
 function formatMoeda(valor: number | null) {
   if (valor == null) return "—";
@@ -10,15 +10,18 @@ function formatMoeda(valor: number | null) {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [{ data: etapas }, { data: clientes }, { data: empreendimentos }] = await Promise.all([
-    supabase.from("etapas").select("*").order("ordem", { ascending: true }),
-    supabase.from("clientes").select("*").eq("arquivado", false).order("nome"),
-    supabase.from("empreendimentos").select("*"),
-  ]);
+  const [{ data: etapas }, { data: clientes }, { data: empreendimentos }, { data: unidades }] =
+    await Promise.all([
+      supabase.from("etapas").select("*").order("ordem", { ascending: true }),
+      supabase.from("clientes").select("*").eq("arquivado", false).order("nome"),
+      supabase.from("empreendimentos").select("*"),
+      supabase.from("unidades").select("*"),
+    ]);
 
   const empreendimentoPorId = new Map<string, Empreendimento>(
     (empreendimentos ?? []).map((e: Empreendimento) => [e.id, e])
   );
+  const unidadePorId = new Map<string, Unidade>((unidades ?? []).map((u: Unidade) => [u.id, u]));
 
   const clientesPorEtapa = new Map<string, Cliente[]>();
   for (const cliente of (clientes ?? []) as Cliente[]) {
@@ -62,6 +65,7 @@ export default async function DashboardPage() {
                   const empreendimento = cliente.empreendimento_id
                     ? empreendimentoPorId.get(cliente.empreendimento_id)
                     : null;
+                  const unidade = cliente.unidade_id ? unidadePorId.get(cliente.unidade_id) : null;
                   return (
                     <Link
                       key={cliente.id}
@@ -72,7 +76,7 @@ export default async function DashboardPage() {
                       {empreendimento && (
                         <p className="mt-0.5 text-xs text-slate-500">
                           {empreendimento.nome}
-                          {cliente.unidade ? ` · ${cliente.unidade}` : ""}
+                          {unidade ? ` · Unidade ${unidade.numero}` : ""}
                         </p>
                       )}
                       <p className="mt-1 text-xs text-slate-400">

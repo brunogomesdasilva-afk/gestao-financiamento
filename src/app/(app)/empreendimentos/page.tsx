@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Empreendimento } from "@/lib/database.types";
 import { criarEmpreendimento } from "./actions";
@@ -28,8 +29,12 @@ export default async function EmpreendimentosPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {(empreendimentos as Empreendimento[] | null)?.map((e) => (
-                <tr key={e.id}>
-                  <td className="px-4 py-2 text-slate-900">{e.nome}</td>
+                <tr key={e.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-2 text-slate-900">
+                    <Link href={`/empreendimentos/${e.id}`} className="hover:underline">
+                      {e.nome}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2 text-slate-600">{e.incorporadora ?? "—"}</td>
                   <td className="px-4 py-2 text-slate-600">{e.endereco ?? "—"}</td>
                 </tr>
