@@ -157,10 +157,42 @@ export async function avancarEtapa(clienteId: string, formData: FormData) {
   revalidatePath(`/clientes/${clienteId}`);
 }
 
+// Registra no histórico da unidade (aba "Andamento") uma ação feita sobre o acompanhamento do cliente.
+async function registrarAcao(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  clienteId: string,
+  etapaId: string | null,
+  observacao: string
+) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  await supabase.from("andamento_historico").insert({
+    cliente_id: clienteId,
+    etapa_id: etapaId,
+    observacao,
+    usuario_id: user?.id ?? null,
+  });
+}
+
+function revalidarCarteira(clienteId: string) {
+  revalidatePath("/");
+  revalidatePath("/clientes");
+  revalidatePath("/clientes/novo");
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
 // Concluir (arquivado = true) libera a unidade para outro analista; reativar só funciona se
 // ninguém tiver assumido a unidade nesse meio tempo.
 export async function arquivarCliente(clienteId: string, arquivado: boolean) {
   const supabase = await createClient();
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("etapa_atual_id")
+    .eq("id", clienteId)
+    .single();
+
   const { error } = await supabase.from("clientes").update({ arquivado }).eq("id", clienteId);
 
   if (error) {
@@ -171,8 +203,35 @@ export async function arquivarCliente(clienteId: string, arquivado: boolean) {
     redirect(`/clientes/${clienteId}?erro=${encodeURIComponent(mensagem)}`);
   }
 
-  revalidatePath("/");
-  revalidatePath("/clientes");
-  revalidatePath("/clientes/novo");
-  revalidatePath(`/clientes/${clienteId}`);
+  await registrarAcao(
+    supabase,
+    clienteId,
+    cliente?.etapa_atual_id ?? null,
+    arquivado ? "Análise concluída e unidade liberada" : "Unidade reativada"
+  );
+
+  revalidarCarteira(clienteId);
+}
+
+// O analista devolve a unidade: ela sai da carteira dele e volta a ficar disponível, sem analista,
+// para qualquer analista assumir. O cadastro e o histórico ficam guardados na unidade.
+export async function devolverUnidade(clienteId: string) {
+  const supabase = await createClient();
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("etapa_atual_id, arquivado")
+    .eq("id", clienteId)
+    .single();
+  if (!cliente || cliente.arquivado) {
+    redirect(`/clientes?erro=${encodeURIComponent("Essa unidade não está mais na sua carteira.")}`);
+  }
+
+  const { error } = await supabase.from("clientes").update({ arquivado: true }).eq("id", clienteId);
+  if (error) redirect(`/clientes?erro=${encodeURIComponent(error.message)}`);
+
+  await registrarAcao(supabase, clienteId, cliente.etapa_atual_id, "Unidade devolvida à carteira sem analista");
+
+  revalidarCarteira(clienteId);
+  redirect(`/clientes?ok=${encodeURIComponent("Unidade devolvida. Ela ficou disponível para outro analista assumir.")}`);
 }

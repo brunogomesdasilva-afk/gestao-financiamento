@@ -3,8 +3,15 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilAtual } from "@/lib/auth";
 import type { Cliente, Empreendimento, Etapa, Torre, Unidade } from "@/lib/database.types";
+import { devolverUnidade } from "./actions";
+import { MenuAcoesUnidade } from "./MenuAcoesUnidade";
 
-export default async function CarteiraPage() {
+export default async function CarteiraPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string; ok?: string }>;
+}) {
+  const { erro, ok } = await searchParams;
   const atual = await getPerfilAtual();
   if (!atual) redirect("/login");
 
@@ -52,6 +59,9 @@ export default async function CarteiraPage() {
         </Link>
       </div>
 
+      {erro && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
+      {ok && <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{ok}</p>}
+
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
@@ -62,6 +72,9 @@ export default async function CarteiraPage() {
               <th className="px-4 py-2 font-medium">Proprietário</th>
               <th className="px-4 py-2 font-medium">Status</th>
               <th className="px-4 py-2 font-medium">Assumida em</th>
+              <th className="w-12 px-2 py-2">
+                <span className="sr-only">Ações</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -93,12 +106,15 @@ export default async function CarteiraPage() {
                   <td className="px-4 py-2 text-slate-600">
                     {new Date(c.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                   </td>
+                  <td className="px-2 py-2 text-right">
+                    <MenuAcoesUnidade clienteId={c.id} devolverAction={devolverUnidade.bind(null, c.id)} />
+                  </td>
                 </tr>
               );
             })}
             {clientes.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                   Você ainda não assumiu nenhuma unidade.
                 </td>
               </tr>
