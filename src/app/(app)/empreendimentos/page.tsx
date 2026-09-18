@@ -50,12 +50,20 @@ export default async function EmpreendimentosPage() {
             &ldquo;Disponíveis&rdquo; são as unidades vendidas que ainda não foram assumidas por nenhum analista.
           </p>
         </div>
-        <Link
-          href="/empreendimentos/importar"
-          className="shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          Cadastrar novo empreendimento
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/empreendimentos/atualizar-espelho"
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Atualizar espelho de vendas
+          </Link>
+          <Link
+            href="/empreendimentos/importar"
+            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            Cadastrar novo empreendimento
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -65,6 +73,7 @@ export default async function EmpreendimentosPage() {
               <th className="px-4 py-2 font-medium">Empreendimento</th>
               <th className="px-4 py-2 text-right font-medium">Unidades</th>
               <th className="px-4 py-2 text-right font-medium">Disponíveis</th>
+              <th className="px-4 py-2 font-medium">Última atualização do espelho</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -77,11 +86,20 @@ export default async function EmpreendimentosPage() {
                 </td>
                 <td className="px-4 py-2 text-right text-slate-600">{totais.get(e.id) ?? 0}</td>
                 <td className="px-4 py-2 text-right font-medium text-slate-900">{disponiveis.get(e.id) ?? 0}</td>
+                <td className="px-4 py-2 text-slate-600">
+                  {e.espelho_atualizado_em
+                    ? new Date(e.espelho_atualizado_em).toLocaleString("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                        timeZone: "America/Sao_Paulo",
+                      })
+                    : "—"}
+                </td>
               </tr>
             ))}
             {lista.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
                   Nenhum empreendimento cadastrado ainda.
                 </td>
               </tr>

@@ -237,27 +237,28 @@ async function leiturasDaImagem(
   return leituras;
 }
 
-// Uma única entrada para o espelho de vendas: foto (.png) ou planilha (.xlsx/.xltx).
-export async function importarEspelhoVendas(empreendimentoId: string, formData: FormData) {
-  await exigirAdmin();
+type ResultadoImportacao = { erro: string } | { params: URLSearchParams };
+
+// Lê a foto (.png) ou a planilha (.xlsx/.xltx) do espelho de vendas e atualiza o status das unidades.
+async function executarImportacao(
+  empreendimentoId: string,
+  arquivo: File | null
+): Promise<ResultadoImportacao> {
   const supabase = await createClient();
-  const arquivo = formData.get("arquivo") as File | null;
 
-  function falhar(mensagem: string): never {
-    redirect(`/empreendimentos/${empreendimentoId}?erroImportacao=${encodeURIComponent(mensagem)}`);
+  if (!arquivo || arquivo.size === 0) {
+    return { erro: "Selecione a foto (.png) ou a planilha (.xlsx) do espelho de vendas." };
   }
-
-  if (!arquivo || arquivo.size === 0) falhar("Selecione a foto (.png) ou a planilha (.xlsx) do espelho de vendas.");
 
   const nomeArquivo = arquivo.name.toLowerCase();
   const ehImagem = nomeArquivo.endsWith(".png");
   const ehPlanilha = /\.(xlsx|xltx)$/.test(nomeArquivo);
   if (!ehImagem && !ehPlanilha) {
-    falhar(
-      nomeArquivo.endsWith(".xls")
+    return {
+      erro: nomeArquivo.endsWith(".xls")
         ? 'O formato antigo .xls não é suportado. Abra no Excel e use "Salvar como" .xlsx.'
-        : "Formato não suportado. Envie a foto em .png ou a planilha em .xlsx."
-    );
+        : "Formato não suportado. Envie a foto em .png ou a planilha em .xlsx.",
+    };
   }
 
   const { data: statusData } = await supabase
@@ -317,7 +318,7 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
   }
 
   if (!erro && leituras.length === 0) erro = "Nenhuma unidade reconhecida no arquivo.";
-  if (erro) falhar(erro);
+  if (erro) return { erro };
 
   // Uma unidade repetida (ex.: várias linhas da mesma unidade) conta uma vez.
   const unicas = new Map<string, LeituraUnidade>();
@@ -330,7 +331,13 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
   } catch (e) {
     erro = e instanceof Error ? e.message : "Erro ao gravar as unidades.";
   }
-  if (!resultado) falhar(erro ?? "Erro ao gravar as unidades.");
+  if (!resultado) return { erro: erro ?? "Erro ao gravar as unidades." };
+
+  await supabase
+    .from("empreendimentos")
+    .update({ espelho_atualizado_em: new Date().toISOString() })
+    .eq("id", empreendimentoId);
+  revalidatePath("/empreendimentos");
 
   const contagem = new Map<string, number>();
   for (const l of leituras) contagem.set(l.status, (contagem.get(l.status) ?? 0) + 1);
@@ -347,7 +354,35 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
     resumo,
   });
   if (desconhecidas.size > 0) params.set("desconhecidas", Array.from(desconhecidas).join(","));
-  redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
+  return { params };
+}
+
+// Importação feita a partir da página do empreendimento.
+export async function importarEspelhoVendas(empreendimentoId: string, formData: FormData) {
+  await exigirAdmin();
+  const resultado = await executarImportacao(empreendimentoId, formData.get("arquivo") as File | null);
+
+  if ("erro" in resultado) {
+    redirect(`/empreendimentos/${empreendimentoId}?erroImportacao=${encodeURIComponent(resultado.erro)}`);
+  }
+  redirect(`/empreendimentos/${empreendimentoId}?${resultado.params.toString()}`);
+}
+
+// Importação feita pela tela "Atualizar espelho de vendas", onde o empreendimento é escolhido no formulário.
+export async function atualizarEspelhoVendas(formData: FormData) {
+  await exigirAdmin();
+  const empreendimentoId = String(formData.get("empreendimento_id") ?? "");
+  const tela = "/empreendimentos/atualizar-espelho";
+
+  if (!empreendimentoId) {
+    redirect(`${tela}?erro=${encodeURIComponent("Escolha o empreendimento.")}`);
+  }
+
+  const resultado = await executarImportacao(empreendimentoId, formData.get("arquivo") as File | null);
+  if ("erro" in resultado) {
+    redirect(`${tela}?empreendimento=${empreendimentoId}&erro=${encodeURIComponent(resultado.erro)}`);
+  }
+  redirect(`/empreendimentos/${empreendimentoId}?${resultado.params.toString()}`);
 }
 
 // Cadastra o empreendimento (nome do arquivo ou nome informado), suas torres e unidades a partir da

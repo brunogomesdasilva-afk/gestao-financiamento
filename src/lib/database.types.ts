@@ -11,6 +11,7 @@ export type Empreendimento = {
   nome: string;
   endereco: string | null;
   incorporadora: string | null;
+  espelho_atualizado_em: string | null;
   created_at: string;
 };
 
