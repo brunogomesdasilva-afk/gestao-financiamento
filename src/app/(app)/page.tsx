@@ -20,13 +20,22 @@ export default async function DashboardPage({
   if (empreendimentoFiltro) clientesQuery = clientesQuery.eq("empreendimento_id", empreendimentoFiltro);
   if (etapaFiltro) clientesQuery = clientesQuery.eq("etapa_atual_id", etapaFiltro);
 
-  const [{ data: etapas }, { data: clientes }, { data: empreendimentos }, { data: unidades }] =
-    await Promise.all([
-      supabase.from("etapas").select("*").order("ordem", { ascending: true }),
-      clientesQuery,
-      supabase.from("empreendimentos").select("*").order("nome"),
-      supabase.from("unidades").select("*"),
-    ]);
+  const [
+    { data: etapas },
+    { data: clientes },
+    { data: empreendimentos },
+    { data: unidades },
+    { data: usuarios },
+  ] = await Promise.all([
+    supabase.from("etapas").select("*").order("ordem", { ascending: true }),
+    clientesQuery,
+    supabase.from("empreendimentos").select("*").order("nome"),
+    supabase.from("unidades").select("*"),
+    supabase.from("profiles").select("id, nome"),
+  ]);
+  const nomeUsuarioPorId = new Map<string, string>(
+    ((usuarios ?? []) as { id: string; nome: string }[]).map((u) => [u.id, u.nome])
+  );
 
   const empreendimentoPorId = new Map<string, Empreendimento>(
     (empreendimentos ?? []).map((e: Empreendimento) => [e.id, e])
@@ -56,7 +65,7 @@ export default async function DashboardPage({
           href="/clientes/novo"
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
         >
-          + Novo cliente
+          Assumir unidade
         </Link>
       </div>
 
@@ -101,6 +110,11 @@ export default async function DashboardPage({
                       <p className="mt-1 text-xs text-slate-400">
                         {formatMoeda(cliente.financiamento_contratado)}
                       </p>
+                      {cliente.analista_responsavel_id && (
+                        <p className="mt-1 text-xs text-slate-400">
+                          Analista: {nomeUsuarioPorId.get(cliente.analista_responsavel_id) ?? "—"}
+                        </p>
+                      )}
                     </Link>
                   );
                 })}

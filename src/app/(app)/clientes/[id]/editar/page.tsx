@@ -1,9 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, ModalidadeFinanciamento, Profile } from "@/lib/database.types";
-import { getEmpreendimentosTorresEUnidadesDisponiveis } from "@/lib/unidades";
+import type { Cliente, Empreendimento, ModalidadeFinanciamento, Profile, Torre, Unidade } from "@/lib/database.types";
 import { atualizarCliente } from "../../actions";
-import { SeletorUnidade } from "../../SeletorUnidade";
 
 export default async function EditarClientePage({
   params,
@@ -26,9 +24,20 @@ export default async function EditarClientePage({
   const clienteTyped = cliente as Cliente;
   const usuariosTyped = (usuarios as Profile[] | null) ?? [];
   const modalidadesTyped = (modalidades as ModalidadeFinanciamento[] | null) ?? [];
-  const { empreendimentos, torres, unidades } = await getEmpreendimentosTorresEUnidadesDisponiveis(
-    clienteTyped.unidade_id ?? undefined
-  );
+
+  const { data: unidadeData } = clienteTyped.unidade_id
+    ? await supabase.from("unidades").select("*").eq("id", clienteTyped.unidade_id).single()
+    : { data: null };
+  const unidade = unidadeData as Unidade | null;
+  const { data: torreData } = unidade
+    ? await supabase.from("torres").select("*").eq("id", unidade.torre_id).single()
+    : { data: null };
+  const torre = torreData as Torre | null;
+  const { data: empreendimentoData } = clienteTyped.empreendimento_id
+    ? await supabase.from("empreendimentos").select("*").eq("id", clienteTyped.empreendimento_id).single()
+    : { data: null };
+  const empreendimento = empreendimentoData as Empreendimento | null;
+  const analista = usuariosTyped.find((p) => p.id === clienteTyped.analista_responsavel_id);
   const atualizarComId = atualizarCliente.bind(null, id);
 
   return (
@@ -64,14 +73,14 @@ export default async function EditarClientePage({
 
         <section>
           <h2 className="text-sm font-semibold text-slate-900">Unidade</h2>
-          <div className="mt-3">
-            <SeletorUnidade
-              empreendimentos={empreendimentos}
-              torres={torres}
-              unidades={unidades}
-              unidadeSelecionadaId={clienteTyped.unidade_id}
-            />
-          </div>
+          <p className="mt-3 text-sm text-slate-700">
+            {empreendimento?.nome ?? "—"}
+            {torre ? ` · ${torre.nome}` : ""}
+            {unidade ? ` · Unidade ${unidade.numero}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            A unidade é definida ao assumir a análise e não pode ser trocada aqui.
+          </p>
         </section>
 
         <section>
@@ -162,14 +171,11 @@ export default async function EditarClientePage({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700">Analista responsável</label>
-              <select name="analista_responsavel_id" defaultValue={clienteTyped.analista_responsavel_id ?? ""} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Selecione</option>
-                {usuariosTyped.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
+              <input
+                disabled
+                value={analista?.nome ?? "—"}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
+              />
             </div>
           </div>
         </section>

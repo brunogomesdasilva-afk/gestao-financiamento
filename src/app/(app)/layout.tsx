@@ -29,6 +29,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-sm text-slate-600 hover:text-slate-900">
               Clientes
             </Link>
+            <Link href="/clientes/novo" className="text-sm text-slate-600 hover:text-slate-900">
+              Assumir unidade
+            </Link>
             <Link href="/empreendimentos" className="text-sm text-slate-600 hover:text-slate-900">
               Empreendimentos
             </Link>

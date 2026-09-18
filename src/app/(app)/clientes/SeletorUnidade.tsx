@@ -3,25 +3,18 @@
 import { useMemo, useState } from "react";
 import type { Empreendimento, Torre, Unidade } from "@/lib/database.types";
 
-type UnidadeComTorre = Unidade & { torre_id: string };
-
 export function SeletorUnidade({
   empreendimentos,
   torres,
   unidades,
-  unidadeSelecionadaId,
 }: {
   empreendimentos: Empreendimento[];
   torres: Torre[];
-  unidades: UnidadeComTorre[];
-  unidadeSelecionadaId?: string | null;
+  unidades: Unidade[];
 }) {
-  const unidadeInicial = unidades.find((u) => u.id === unidadeSelecionadaId);
-  const torreInicial = torres.find((t) => t.id === unidadeInicial?.torre_id);
-
-  const [empreendimentoId, setEmpreendimentoId] = useState(torreInicial?.empreendimento_id ?? "");
-  const [torreId, setTorreId] = useState(unidadeInicial?.torre_id ?? "");
-  const [unidadeId, setUnidadeId] = useState(unidadeSelecionadaId ?? "");
+  const [empreendimentoId, setEmpreendimentoId] = useState("");
+  const [torreId, setTorreId] = useState("");
+  const [unidadeId, setUnidadeId] = useState("");
 
   const torresDoEmpreendimento = useMemo(
     () => torres.filter((t) => t.empreendimento_id === empreendimentoId),
@@ -55,7 +48,7 @@ export function SeletorUnidade({
         </select>
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700">Torre</label>
+        <label className="block text-sm font-medium text-slate-700">Bloco / torre</label>
         <select
           value={torreId}
           onChange={(e) => {
@@ -77,6 +70,7 @@ export function SeletorUnidade({
         <label className="block text-sm font-medium text-slate-700">Unidade</label>
         <select
           name="unidade_id"
+          required
           value={unidadeId}
           onChange={(e) => setUnidadeId(e.target.value)}
           disabled={!torreId}
@@ -85,7 +79,7 @@ export function SeletorUnidade({
           <option value="">Selecione</option>
           {unidadesDaTorre.map((u) => (
             <option key={u.id} value={u.id}>
-              {u.numero} ({u.status})
+              {u.numero}
             </option>
           ))}
         </select>
