@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Etapa, ModalidadeFinanciamento } from "@/lib/database.types";
+import { getBancos } from "@/lib/bancos";
 import { getUnidadesParaAssumir } from "@/lib/unidades";
 import { assumirUnidade } from "../actions";
 import { CamposFinanciamento } from "../CamposFinanciamento";
@@ -15,12 +16,13 @@ export default async function AssumirUnidadePage({
   const { erro } = await searchParams;
   const supabase = await createClient();
 
-  const [{ empreendimentos, torres, unidades }, { data: modalidades }, { data: etapas }, { data: auth }] =
+  const [{ empreendimentos, torres, unidades }, { data: modalidades }, { data: etapas }, { data: auth }, bancos] =
     await Promise.all([
       getUnidadesParaAssumir(),
       supabase.from("modalidades_financiamento").select("*").order("ordem"),
       supabase.from("etapas").select("*").order("ordem", { ascending: true }),
       supabase.auth.getUser(),
+      getBancos(),
     ]);
 
   let nomeAnalista = auth.user?.email ?? "";
@@ -92,7 +94,10 @@ export default async function AssumirUnidadePage({
           <section>
             <h2 className="text-sm font-semibold text-slate-900">Financiamento</h2>
             <div className="mt-3">
-              <CamposFinanciamento modalidades={(modalidades ?? []) as ModalidadeFinanciamento[]} />
+              <CamposFinanciamento
+                modalidades={(modalidades ?? []) as ModalidadeFinanciamento[]}
+                bancos={bancos}
+              />
             </div>
           </section>
 

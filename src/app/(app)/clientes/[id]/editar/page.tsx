@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente, Empreendimento, ModalidadeFinanciamento, Profile, Torre, Unidade } from "@/lib/database.types";
+import { getBancos } from "@/lib/bancos";
 import { atualizarCliente } from "../../actions";
 import { CamposFinanciamento } from "../../CamposFinanciamento";
 
@@ -17,10 +18,11 @@ export default async function EditarClientePage({
   const { erro } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cliente }, { data: usuarios }, { data: modalidades }] = await Promise.all([
+  const [{ data: cliente }, { data: usuarios }, { data: modalidades }, bancos] = await Promise.all([
     supabase.from("clientes").select("*").eq("id", id).single(),
     supabase.from("profiles").select("*").order("nome"),
     supabase.from("modalidades_financiamento").select("*").order("ordem"),
+    getBancos(),
   ]);
 
   if (!cliente) notFound();
@@ -89,7 +91,7 @@ export default async function EditarClientePage({
         <section>
           <h2 className="text-sm font-semibold text-slate-900">Financiamento</h2>
           <div className="mt-3">
-            <CamposFinanciamento modalidades={modalidadesTyped} cliente={clienteTyped} />
+            <CamposFinanciamento modalidades={modalidadesTyped} bancos={bancos} cliente={clienteTyped} />
           </div>
         </section>
 

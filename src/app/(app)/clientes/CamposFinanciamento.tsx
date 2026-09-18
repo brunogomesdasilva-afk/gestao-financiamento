@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { Banco } from "@/lib/bancos";
 import type { Cliente, ModalidadeFinanciamento } from "@/lib/database.types";
 import { paraCampoBR, parseValorBR } from "@/lib/valores";
 
@@ -35,9 +36,11 @@ function CampoValor({
 // Campos do financiamento (todos opcionais), usados ao assumir a unidade e na edição do cliente.
 export function CamposFinanciamento({
   modalidades,
+  bancos,
   cliente,
 }: {
   modalidades: ModalidadeFinanciamento[];
+  bancos: Banco[];
   cliente?: Partial<Cliente>;
 }) {
   const [aprovado, setAprovado] = useState(paraCampoBR(cliente?.valor_aprovado));
@@ -49,7 +52,19 @@ export function CamposFinanciamento({
     <div className="grid grid-cols-2 gap-4">
       <div>
         <label className="block text-sm font-medium text-slate-700">Banco financiador</label>
-        <input name="banco_financiador" defaultValue={cliente?.banco_financiador ?? ""} className={CAMPO} />
+        <input
+          name="banco_financiador"
+          list="bancos-brasil"
+          autoComplete="off"
+          placeholder="Digite para buscar"
+          defaultValue={cliente?.banco_financiador ?? ""}
+          className={CAMPO}
+        />
+        <datalist id="bancos-brasil">
+          {bancos.map((b, i) => (
+            <option key={`${b.codigo}-${i}`} value={b.nome} label={b.codigo != null ? String(b.codigo) : undefined} />
+          ))}
+        </datalist>
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700">Agência</label>
