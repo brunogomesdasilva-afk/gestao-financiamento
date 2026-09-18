@@ -4,14 +4,31 @@ import { createClient } from "@/lib/supabase/server";
 import { getPerfilAtual } from "@/lib/auth";
 import type { Cliente, Empreendimento, Etapa, Torre, Unidade } from "@/lib/database.types";
 import { devolverUnidade } from "./actions";
+import { FiltrosCarteira, type LinhaFiltro } from "./FiltrosCarteira";
 import { MenuAcoesUnidade } from "./MenuAcoesUnidade";
+
+type Linha = LinhaFiltro & { cliente: Cliente; etapaCor: string | null };
 
 export default async function CarteiraPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; ok?: string }>;
+  searchParams: Promise<{
+    erro?: string;
+    ok?: string;
+    empreendimento?: string;
+    bloco?: string;
+    unidade?: string;
+    status?: string;
+  }>;
 }) {
-  const { erro, ok } = await searchParams;
+  const { erro, ok, ...filtros } = await searchParams;
+  const selecao = {
+    empreendimento: filtros.empreendimento ?? "",
+    bloco: filtros.bloco ?? "",
+    unidade: filtros.unidade ?? "",
+    status: filtros.status ?? "",
+  };
+
   const atual = await getPerfilAtual();
   if (!atual) redirect("/login");
 
@@ -42,13 +59,42 @@ export default async function CarteiraPage({
   const empreendimentoPorId = new Map(((empreendimentosData ?? []) as Empreendimento[]).map((e) => [e.id, e]));
   const etapaPorId = new Map(((etapasData ?? []) as Etapa[]).map((e) => [e.id, e]));
 
+  const linhas: Linha[] = clientes.map((c) => {
+    const unidade = c.unidade_id ? unidadePorId.get(c.unidade_id) : undefined;
+    const torre = unidade ? torrePorId.get(unidade.torre_id) : undefined;
+    const empreendimento = c.empreendimento_id ? empreendimentoPorId.get(c.empreendimento_id) : undefined;
+    const etapa = c.etapa_atual_id ? etapaPorId.get(c.etapa_atual_id) : undefined;
+    return {
+      cliente: c,
+      empreendimentoId: c.empreendimento_id ?? "",
+      empreendimento: empreendimento?.nome ?? "—",
+      bloco: torre?.nome ?? "—",
+      unidade: unidade?.numero ?? "—",
+      etapaId: c.etapa_atual_id ?? "",
+      etapa: etapa?.nome ?? "—",
+      etapaOrdem: etapa?.ordem ?? 0,
+      etapaCor: etapa?.cor ?? null,
+    };
+  });
+
+  const visiveis = linhas.filter(
+    (l) =>
+      (!selecao.empreendimento || l.empreendimentoId === selecao.empreendimento) &&
+      (!selecao.bloco || l.bloco === selecao.bloco) &&
+      (!selecao.unidade || l.unidade === selecao.unidade) &&
+      (!selecao.status || l.etapaId === selecao.status)
+  );
+  const filtrando = visiveis.length !== linhas.length;
+
   return (
     <div>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Minha carteira</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Unidades que você assumiu e ainda estão em análise: {clientes.length}.
+            {filtrando
+              ? `Mostrando ${visiveis.length} de ${linhas.length} unidade(s) que você assumiu e ainda estão em análise.`
+              : `Unidades que você assumiu e ainda estão em análise: ${linhas.length}.`}
           </p>
         </div>
         <Link
@@ -61,6 +107,21 @@ export default async function CarteiraPage({
 
       {erro && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
       {ok && <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{ok}</p>}
+
+      {linhas.length > 0 && (
+        <FiltrosCarteira
+          linhas={linhas.map((l) => ({
+            empreendimentoId: l.empreendimentoId,
+            empreendimento: l.empreendimento,
+            bloco: l.bloco,
+            unidade: l.unidade,
+            etapaId: l.etapaId,
+            etapa: l.etapa,
+            etapaOrdem: l.etapaOrdem,
+          }))}
+          selecao={selecao}
+        />
+      )}
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
@@ -78,44 +139,40 @@ export default async function CarteiraPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {clientes.map((c) => {
-              const unidade = c.unidade_id ? unidadePorId.get(c.unidade_id) : undefined;
-              const torre = unidade ? torrePorId.get(unidade.torre_id) : undefined;
-              const empreendimento = c.empreendimento_id ? empreendimentoPorId.get(c.empreendimento_id) : undefined;
-              const etapa = c.etapa_atual_id ? etapaPorId.get(c.etapa_atual_id) : undefined;
-              return (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 text-slate-900">{empreendimento?.nome ?? "—"}</td>
-                  <td className="px-4 py-2 text-slate-600">{torre?.nome ?? "—"}</td>
-                  <td className="px-4 py-2 font-medium text-slate-900">
-                    <Link href={`/clientes/${c.id}`} className="hover:underline">
-                      {unidade?.numero ?? "—"}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">{c.nome ?? "Proprietário não informado"}</td>
-                  <td className="px-4 py-2 text-slate-600">
-                    {etapa ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: etapa.cor }} />
-                        {etapa.nome}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-slate-600">
-                    {new Date(c.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
-                  </td>
-                  <td className="px-2 py-2 text-right">
-                    <MenuAcoesUnidade clienteId={c.id} devolverAction={devolverUnidade.bind(null, c.id)} />
-                  </td>
-                </tr>
-              );
-            })}
-            {clientes.length === 0 && (
+            {visiveis.map((l) => (
+              <tr key={l.cliente.id} className="hover:bg-slate-50">
+                <td className="px-4 py-2 text-slate-900">{l.empreendimento}</td>
+                <td className="px-4 py-2 text-slate-600">{l.bloco}</td>
+                <td className="px-4 py-2 font-medium text-slate-900">
+                  <Link href={`/clientes/${l.cliente.id}`} className="hover:underline">
+                    {l.unidade}
+                  </Link>
+                </td>
+                <td className="px-4 py-2 text-slate-600">{l.cliente.nome ?? "Proprietário não informado"}</td>
+                <td className="px-4 py-2 text-slate-600">
+                  {l.etapaCor ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: l.etapaCor }} />
+                      {l.etapa}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="px-4 py-2 text-slate-600">
+                  {new Date(l.cliente.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                </td>
+                <td className="px-2 py-2 text-right">
+                  <MenuAcoesUnidade clienteId={l.cliente.id} devolverAction={devolverUnidade.bind(null, l.cliente.id)} />
+                </td>
+              </tr>
+            ))}
+            {visiveis.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                  Você ainda não assumiu nenhuma unidade.
+                  {linhas.length === 0
+                    ? "Você ainda não assumiu nenhuma unidade."
+                    : "Nenhuma unidade encontrada com esses filtros."}
                 </td>
               </tr>
             )}
