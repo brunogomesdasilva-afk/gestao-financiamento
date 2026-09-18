@@ -24,7 +24,59 @@ function Icone({ children }: { children: ReactNode }) {
   );
 }
 
-const ITENS = [
+type ItemMenu = {
+  href: string;
+  rotulo: string;
+  somenteAdmin?: boolean;
+  ativo: (pathname: string) => boolean;
+  icone: ReactNode;
+  filhos?: ItemMenu[];
+};
+
+const ITENS: ItemMenu[] = [
+  {
+    href: "/empreendimentos",
+    rotulo: "Cadastrar empreendimento",
+    somenteAdmin: true,
+    ativo: (p: string) =>
+      p === "/empreendimentos" ||
+      (p.startsWith("/empreendimentos/") &&
+        p !== "/empreendimentos/importar" &&
+        p !== "/empreendimentos/atualizar-espelho"),
+    icone: (
+      <Icone>
+        <rect x="4" y="2" width="16" height="20" rx="2" />
+        <path d="M9 22v-4h6v4" />
+        <path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01" />
+      </Icone>
+    ),
+    filhos: [
+      {
+        href: "/empreendimentos/importar",
+        rotulo: "Cadastrar novo empreendimento",
+        ativo: (p: string) => p === "/empreendimentos/importar",
+        icone: (
+          <Icone>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="16" />
+            <line x1="8" y1="12" x2="16" y2="12" />
+          </Icone>
+        ),
+      },
+      {
+        href: "/empreendimentos/atualizar-espelho",
+        rotulo: "Atualizar espelho de vendas",
+        ativo: (p: string) => p === "/empreendimentos/atualizar-espelho",
+        icone: (
+          <Icone>
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </Icone>
+        ),
+      },
+    ],
+  },
   {
     href: "/",
     rotulo: "Painel",
@@ -51,19 +103,6 @@ const ITENS = [
     ),
   },
   {
-    href: "/empreendimentos",
-    rotulo: "Cadastrar empreendimento",
-    somenteAdmin: true,
-    ativo: (p: string) => p.startsWith("/empreendimentos"),
-    icone: (
-      <Icone>
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="16" />
-        <line x1="8" y1="12" x2="16" y2="12" />
-      </Icone>
-    ),
-  },
-  {
     href: "/usuarios",
     rotulo: "Usuários",
     somenteAdmin: true,
@@ -78,6 +117,38 @@ const ITENS = [
     ),
   },
 ];
+
+function LinkMenu({
+  item,
+  pathname,
+  recolhido,
+  filho,
+}: {
+  item: ItemMenu;
+  pathname: string;
+  recolhido: boolean;
+  filho?: boolean;
+}) {
+  const ativo = item.ativo(pathname);
+  return (
+    <Link
+      href={item.href}
+      title={recolhido ? item.rotulo : undefined}
+      aria-label={item.rotulo}
+      aria-current={ativo ? "page" : undefined}
+      className={`flex items-center gap-3 rounded-md px-3 py-2 ${filho && !recolhido ? "text-[13px]" : "text-sm"} ${
+        recolhido ? "justify-center" : ""
+      } ${
+        ativo
+          ? "bg-slate-100 font-medium text-slate-900"
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+      }`}
+    >
+      {item.icone}
+      {!recolhido && <span className={filho ? "leading-tight" : "truncate"}>{item.rotulo}</span>}
+    </Link>
+  );
+}
 
 export function Sidebar({
   nome,
@@ -100,7 +171,7 @@ export function Sidebar({
   return (
     <aside
       className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${
-        recolhido ? "w-16" : "w-64"
+        recolhido ? "w-16" : "w-72"
       }`}
     >
       <div className={`flex h-14 items-center border-b border-slate-200 ${recolhido ? "justify-center" : "justify-between px-4"}`}>
@@ -122,28 +193,18 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {ITENS.filter((item) => !item.somenteAdmin || perfil === "admin").map((item) => {
-          const ativo = item.ativo(pathname);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={recolhido ? item.rotulo : undefined}
-              aria-label={item.rotulo}
-              aria-current={ativo ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
-                recolhido ? "justify-center" : ""
-              } ${
-                ativo
-                  ? "bg-slate-100 font-medium text-slate-900"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              {item.icone}
-              {!recolhido && <span className="truncate">{item.rotulo}</span>}
-            </Link>
-          );
-        })}
+        {ITENS.filter((item) => !item.somenteAdmin || perfil === "admin").map((item) => (
+          <div key={item.href} className="space-y-1">
+            <LinkMenu item={item} pathname={pathname} recolhido={recolhido} />
+            {item.filhos && (
+              <div className={recolhido ? "space-y-1" : "ml-5 space-y-1 border-l border-slate-200 pl-2"}>
+                {item.filhos.map((filho) => (
+                  <LinkMenu key={filho.href} item={filho} pathname={pathname} recolhido={recolhido} filho />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </nav>
 
       <div className="border-t border-slate-200 p-2">
