@@ -123,13 +123,15 @@ function LinkMenu({
   pathname,
   recolhido,
   filho,
+  forcarAtivo,
 }: {
   item: ItemMenu;
   pathname: string;
   recolhido: boolean;
   filho?: boolean;
+  forcarAtivo?: boolean;
 }) {
-  const ativo = item.ativo(pathname);
+  const ativo = forcarAtivo || item.ativo(pathname);
   return (
     <Link
       href={item.href}
@@ -154,13 +156,22 @@ export function Sidebar({
   nome,
   perfil,
   recolhidoInicial,
+  submenuInicial,
 }: {
   nome: string;
   perfil: "admin" | "analista";
   recolhidoInicial: boolean;
+  submenuInicial: boolean;
 }) {
   const pathname = usePathname();
   const [recolhido, setRecolhido] = useState(recolhidoInicial);
+  const [submenuAberto, setSubmenuAberto] = useState(submenuInicial);
+
+  function alternarSubmenu() {
+    const proximo = !submenuAberto;
+    setSubmenuAberto(proximo);
+    document.cookie = `submenu_empreendimentos=${proximo ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
+  }
 
   function alternar() {
     const proximo = !recolhido;
@@ -193,18 +204,55 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {ITENS.filter((item) => !item.somenteAdmin || perfil === "admin").map((item) => (
-          <div key={item.href} className="space-y-1">
-            <LinkMenu item={item} pathname={pathname} recolhido={recolhido} />
-            {item.filhos && (
-              <div className={recolhido ? "space-y-1" : "ml-5 space-y-1 border-l border-slate-200 pl-2"}>
-                {item.filhos.map((filho) => (
-                  <LinkMenu key={filho.href} item={filho} pathname={pathname} recolhido={recolhido} filho />
-                ))}
+        {ITENS.filter((item) => !item.somenteAdmin || perfil === "admin").map((item) => {
+          // Com o submenu recolhido, o item pai fica destacado se a página atual for de um dos filhos.
+          const filhoAtivo = item.filhos?.some((f) => f.ativo(pathname)) ?? false;
+          return (
+            <div key={item.href} className="space-y-1">
+              <div className="flex items-center">
+                <div className="min-w-0 flex-1">
+                  <LinkMenu
+                    item={item}
+                    pathname={pathname}
+                    recolhido={recolhido}
+                    forcarAtivo={filhoAtivo && !submenuAberto}
+                  />
+                </div>
+                {item.filhos && !recolhido && (
+                  <button
+                    type="button"
+                    onClick={alternarSubmenu}
+                    aria-expanded={submenuAberto}
+                    aria-label={submenuAberto ? `Recolher ${item.rotulo}` : `Expandir ${item.rotulo}`}
+                    title={submenuAberto ? "Recolher submenu" : "Expandir submenu"}
+                    className="ml-1 shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      {submenuAberto ? <polyline points="6 9 12 15 18 9" /> : <polyline points="9 6 15 12 9 18" />}
+                    </svg>
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+              {item.filhos && !recolhido && submenuAberto && (
+                <div className="ml-5 space-y-1 border-l border-slate-200 pl-2">
+                  {item.filhos.map((filho) => (
+                    <LinkMenu key={filho.href} item={filho} pathname={pathname} recolhido={recolhido} filho />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="border-t border-slate-200 p-2">
