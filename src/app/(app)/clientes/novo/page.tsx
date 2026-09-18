@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Etapa, ModalidadeFinanciamento } from "@/lib/database.types";
 import { getBancos } from "@/lib/bancos";
@@ -35,7 +36,10 @@ export default async function AssumirUnidadePage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-lg font-semibold text-slate-900">Assumir unidade</h1>
+      <Link href="/clientes" className="text-xs text-slate-500 hover:text-slate-900">
+        ← Minha carteira
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold text-slate-900">Assumir unidade</h1>
       <p className="mt-1 text-sm text-slate-500">
         Escolha o empreendimento, o bloco e a unidade cujo financiamento você vai analisar. Ao assumir,
         a unidade fica com você até ser concluída e nenhum outro analista consegue pegá-la. Só aparecem

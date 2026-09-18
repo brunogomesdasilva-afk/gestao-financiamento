@@ -113,6 +113,7 @@ export async function assumirUnidade(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/clientes");
   revalidatePath("/clientes/novo");
   redirect(`/clientes/${cliente.id}`);
 }
@@ -171,6 +172,7 @@ export async function arquivarCliente(clienteId: string, arquivado: boolean) {
   }
 
   revalidatePath("/");
+  revalidatePath("/clientes");
   revalidatePath("/clientes/novo");
   revalidatePath(`/clientes/${clienteId}`);
 }
