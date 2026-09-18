@@ -1,3 +1,4 @@
+import { exigirAdmin } from "@/lib/auth";
 import { cadastrarEmpreendimentoPorExcel } from "../actions";
 
 export default async function CadastrarEmpreendimentoPage({
@@ -5,6 +6,7 @@ export default async function CadastrarEmpreendimentoPage({
 }: {
   searchParams: Promise<{ erro?: string }>;
 }) {
+  await exigirAdmin();
   const { erro } = await searchParams;
 
   return (

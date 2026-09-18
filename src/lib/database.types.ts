@@ -2,6 +2,7 @@ export type Profile = {
   id: string;
   nome: string;
   email: string;
+  perfil: "admin" | "analista";
   created_at: string;
 };
 

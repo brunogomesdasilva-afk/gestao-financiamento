@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { exigirAdmin } from "@/lib/auth";
 import { CAMPO_UNIDADE_LABEL, type HistoricoUnidade, type Profile, type Torre, type Unidade } from "@/lib/database.types";
 
 function formatData(data: string) {
@@ -12,6 +13,7 @@ export default async function HistoricoUnidadePage({
 }: {
   params: Promise<{ id: string; unidadeId: string }>;
 }) {
+  await exigirAdmin();
   const { id, unidadeId } = await params;
   const supabase = await createClient();
 

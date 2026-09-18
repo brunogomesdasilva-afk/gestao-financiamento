@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente, Empreendimento, Etapa, Unidade } from "@/lib/database.types";
+import { getPerfilAtual } from "@/lib/auth";
 import { FiltrosClientes } from "./FiltrosClientes";
 
 function formatMoeda(valor: number | null) {
@@ -11,14 +12,22 @@ function formatMoeda(valor: number | null) {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ empreendimento?: string; etapa?: string }>;
+  searchParams: Promise<{ empreendimento?: string; etapa?: string; analista?: string }>;
 }) {
-  const { empreendimento: empreendimentoFiltro, etapa: etapaFiltro } = await searchParams;
+  const {
+    empreendimento: empreendimentoFiltro,
+    etapa: etapaFiltro,
+    analista: analistaFiltro,
+  } = await searchParams;
   const supabase = await createClient();
+  const atual = await getPerfilAtual();
+  const ehAdmin = atual?.perfil === "admin";
 
+  // O banco já limita cada analista aos próprios clientes; o filtro de analista só existe para o admin.
   let clientesQuery = supabase.from("clientes").select("*").eq("arquivado", false).order("nome");
   if (empreendimentoFiltro) clientesQuery = clientesQuery.eq("empreendimento_id", empreendimentoFiltro);
   if (etapaFiltro) clientesQuery = clientesQuery.eq("etapa_atual_id", etapaFiltro);
+  if (ehAdmin && analistaFiltro) clientesQuery = clientesQuery.eq("analista_responsavel_id", analistaFiltro);
 
   const [
     { data: etapas },
@@ -72,8 +81,10 @@ export default async function DashboardPage({
       <FiltrosClientes
         empreendimentos={(empreendimentos ?? []) as Empreendimento[]}
         etapas={etapasTyped}
+        analistas={ehAdmin ? ((usuarios ?? []) as { id: string; nome: string }[]) : undefined}
         empreendimentoSelecionado={empreendimentoFiltro ?? ""}
         etapaSelecionada={etapaFiltro ?? ""}
+        analistaSelecionado={ehAdmin ? (analistaFiltro ?? "") : ""}
       />
 
       <div className="flex gap-4 overflow-x-auto pb-4">

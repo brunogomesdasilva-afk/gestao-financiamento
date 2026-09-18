@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { exigirAdmin } from "@/lib/auth";
 import { parseEspelhoVendas } from "@/lib/espelhoVendas";
 import { parseListaUnidades, type LinhaUnidade } from "@/lib/listaUnidades";
 import { STATUS_NAO_INFORMADO, type LegendaCor, type Torre, type Unidade } from "@/lib/database.types";
@@ -15,6 +16,7 @@ type LeituraUnidade = {
 };
 
 export async function criarTorre(empreendimentoId: string, formData: FormData) {
+  await exigirAdmin();
   const supabase = await createClient();
 
   await supabase.from("torres").insert({
@@ -30,6 +32,7 @@ export async function criarUnidadesEmLote(
   torreId: string,
   formData: FormData
 ) {
+  await exigirAdmin();
   const supabase = await createClient();
   const status = String(formData.get("status") ?? "");
   const numerosRaw = String(formData.get("numeros") ?? "");
@@ -56,6 +59,7 @@ export async function atualizarStatusUnidade(
   unidadeId: string,
   formData: FormData
 ) {
+  await exigirAdmin();
   const supabase = await createClient();
   const status = String(formData.get("status") ?? "");
   if (!status) return;
@@ -65,6 +69,7 @@ export async function atualizarStatusUnidade(
 }
 
 export async function criarLegendaCor(empreendimentoId: string, formData: FormData) {
+  await exigirAdmin();
   const supabase = await createClient();
   const cor = String(formData.get("cor") ?? "").toUpperCase();
   const status = String(formData.get("status") ?? "");
@@ -78,6 +83,7 @@ export async function criarLegendaCor(empreendimentoId: string, formData: FormDa
 }
 
 export async function removerLegendaCor(empreendimentoId: string, legendaId: string) {
+  await exigirAdmin();
   const supabase = await createClient();
   await supabase.from("legendas_cores").delete().eq("id", legendaId);
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
@@ -158,6 +164,7 @@ async function aplicarLeituraEspelho(empreendimentoId: string, leituras: Leitura
 }
 
 export async function importarEspelhoVendas(empreendimentoId: string, formData: FormData) {
+  await exigirAdmin();
   const supabase = await createClient();
   const arquivo = formData.get("arquivo") as File | null;
 
@@ -208,6 +215,7 @@ export async function importarEspelhoVendas(empreendimentoId: string, formData: 
 // Usado quando os dados vêm de uma foto do espelho de vendas lida manualmente (por mim ou pelo analista),
 // em vez de um arquivo .xlsx com cores nas células.
 export async function importarLeituraManual(empreendimentoId: string, formData: FormData) {
+  await exigirAdmin();
   const texto = String(formData.get("linhas") ?? "");
 
   const leituras: LeituraUnidade[] = texto
@@ -235,6 +243,7 @@ export async function importarLeituraManual(empreendimentoId: string, formData: 
 // planilha "Unidade / Bloco". Pode ser reenviada: só entram as unidades que ainda não existem e o status
 // das já cadastradas não é alterado.
 export async function cadastrarEmpreendimentoPorExcel(formData: FormData) {
+  await exigirAdmin();
   const supabase = await createClient();
   const arquivo = formData.get("arquivo") as File | null;
 

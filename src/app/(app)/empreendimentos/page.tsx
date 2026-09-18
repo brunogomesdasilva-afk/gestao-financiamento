@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { exigirAdmin } from "@/lib/auth";
 import type { Empreendimento } from "@/lib/database.types";
 
 export default async function EmpreendimentosPage() {
+  await exigirAdmin();
   const supabase = await createClient();
   const { data: empreendimentos } = await supabase
     .from("empreendimentos")

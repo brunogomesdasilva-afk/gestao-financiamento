@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { exigirAdmin } from "@/lib/auth";
 import type { Cliente, Empreendimento, LegendaCor, StatusUnidadeConfig, Torre, Unidade } from "@/lib/database.types";
 import {
   atualizarStatusUnidade,
@@ -27,6 +28,7 @@ export default async function EmpreendimentoDetalhePage({
     erroImportacao?: string;
   }>;
 }) {
+  await exigirAdmin();
   const { id } = await params;
   const sp = await searchParams;
   const supabase = await createClient();
