@@ -4,9 +4,18 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { exigirAdmin } from "@/lib/auth";
-import { parseEspelhoVendas } from "@/lib/espelhoVendas";
+import {
+  distanciaCor,
+  hexParaRgb,
+  normalizarTexto,
+  rgbParaHex,
+  statusMaisProximo,
+  type Rgb,
+} from "@/lib/cores";
+import { lerBlocosDaImagem } from "@/lib/espelhoImagem";
+import { parseEspelhoExcel } from "@/lib/espelhoVendas";
 import { parseListaUnidades, type LinhaUnidade } from "@/lib/listaUnidades";
-import { STATUS_NAO_INFORMADO, type LegendaCor, type Torre, type Unidade } from "@/lib/database.types";
+import { STATUS_NAO_INFORMADO, type Torre, type Unidade } from "@/lib/database.types";
 
 type LeituraUnidade = {
   torre: string;
@@ -15,17 +24,10 @@ type LeituraUnidade = {
   areaM2?: number | null;
 };
 
-export async function criarTorre(empreendimentoId: string, formData: FormData) {
-  await exigirAdmin();
-  const supabase = await createClient();
+type Paleta = { nome: string; cor: string }[];
 
-  await supabase.from("torres").insert({
-    empreendimento_id: empreendimentoId,
-    nome: String(formData.get("nome") ?? ""),
-  });
-
-  revalidatePath(`/empreendimentos/${empreendimentoId}`);
-}
+// Célula escura que a foto usa para "posição sem unidade" (ex.: andar que só existe em outro bloco).
+const COR_SEM_UNIDADE: Rgb = [0x29, 0x37, 0x45];
 
 export async function criarUnidadesEmLote(
   empreendimentoId: string,
@@ -68,27 +70,6 @@ export async function atualizarStatusUnidade(
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
 }
 
-export async function criarLegendaCor(empreendimentoId: string, formData: FormData) {
-  await exigirAdmin();
-  const supabase = await createClient();
-  const cor = String(formData.get("cor") ?? "").toUpperCase();
-  const status = String(formData.get("status") ?? "");
-  if (!cor || !status) return;
-
-  await supabase
-    .from("legendas_cores")
-    .upsert({ empreendimento_id: empreendimentoId, cor, status }, { onConflict: "empreendimento_id,cor" });
-
-  revalidatePath(`/empreendimentos/${empreendimentoId}`);
-}
-
-export async function removerLegendaCor(empreendimentoId: string, legendaId: string) {
-  await exigirAdmin();
-  const supabase = await createClient();
-  await supabase.from("legendas_cores").delete().eq("id", legendaId);
-  revalidatePath(`/empreendimentos/${empreendimentoId}`);
-}
-
 async function garantirTorres(
   supabase: Awaited<ReturnType<typeof createClient>>,
   empreendimentoId: string,
@@ -118,10 +99,8 @@ async function garantirTorres(
   return torreIdPorNome;
 }
 
-// Cria as torres que faltam e grava/atualiza as unidades lidas, aproveitando o
-// gatilho do banco para logar automaticamente qualquer status/cor que tenha mudado
-// desde a última importação. Usado tanto pela importação de .xlsx quanto pela colagem
-// manual dos dados lidos de uma foto do espelho de vendas.
+// Cria as torres e unidades que faltam e grava o status lido, aproveitando o gatilho do banco
+// para registrar no histórico da unidade tudo o que mudou desde a última importação.
 async function aplicarLeituraEspelho(empreendimentoId: string, leituras: LeituraUnidade[]) {
   const supabase = await createClient();
 
@@ -139,7 +118,7 @@ async function aplicarLeituraEspelho(empreendimentoId: string, leituras: Leitura
   const torreIds = Array.from(torreIdPorNome.values());
   const { data: existentes } =
     torreIds.length > 0
-      ? await supabase.from("unidades").select("torre_id, numero, status, area_m2").in("torre_id", torreIds)
+      ? await supabase.from("unidades").select("torre_id, numero, status").in("torre_id", torreIds)
       : { data: [] as Unidade[] };
 
   const existentesPorChave = new Map<string, Unidade>(
@@ -151,91 +130,223 @@ async function aplicarLeituraEspelho(empreendimentoId: string, leituras: Leitura
   for (const linha of linhasParaGravar) {
     const existente = existentesPorChave.get(`${linha.torre_id}:${linha.numero}`);
     if (!existente) criadas++;
-    else if (existente.status !== linha.status || existente.area_m2 !== linha.area_m2) atualizadas++;
+    else if (existente.status !== linha.status) atualizadas++;
   }
 
-  if (linhasParaGravar.length > 0) {
-    await supabase.from("unidades").upsert(linhasParaGravar, { onConflict: "torre_id,numero" });
+  // A metragem só é enviada quando veio na leitura, para uma foto não apagar a metragem já cadastrada.
+  const comArea = linhasParaGravar.filter((l) => l.area_m2 != null);
+  const semArea = linhasParaGravar
+    .filter((l) => l.area_m2 == null)
+    .map((l) => ({ torre_id: l.torre_id, numero: l.numero, status: l.status }));
+
+  for (const grupo of [comArea, semArea]) {
+    for (let i = 0; i < grupo.length; i += 500) {
+      const { error } = await supabase
+        .from("unidades")
+        .upsert(grupo.slice(i, i + 500), { onConflict: "torre_id,numero" });
+      if (error) throw new Error(error.message);
+    }
   }
 
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
+  revalidatePath("/clientes/novo");
 
   return { total: linhasParaGravar.length, criadas, atualizadas };
 }
 
+// Traduz a foto em unidades: a numeração vem da posição (andar × 100 + coluna), ancorada nas
+// unidades já cadastradas de cada bloco; os blocos da foto, da esquerda para a direita, correspondem
+// às torres do empreendimento em ordem de nome.
+async function leiturasDaImagem(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  empreendimentoId: string,
+  imagem: Buffer,
+  paleta: Paleta,
+  desconhecidas: Set<string>
+): Promise<LeituraUnidade[]> {
+  const blocos = lerBlocosDaImagem(imagem);
+
+  const { data: torresData } = await supabase
+    .from("torres")
+    .select("id, nome")
+    .eq("empreendimento_id", empreendimentoId);
+  const torres = ((torresData ?? []) as Torre[]).sort((a, b) =>
+    a.nome.localeCompare(b.nome, "pt-BR", { numeric: true })
+  );
+
+  if (torres.length === 0) {
+    throw new Error(
+      "Este empreendimento ainda não tem torres. Cadastre-o primeiro pela planilha (Cadastrar empreendimento)."
+    );
+  }
+  if (torres.length !== blocos.length) {
+    throw new Error(
+      `A foto tem ${blocos.length} bloco(s), mas o empreendimento tem ${torres.length} torre(s) cadastrada(s).`
+    );
+  }
+
+  const { data: unidadesData } = await supabase
+    .from("unidades")
+    .select("torre_id, numero")
+    .in("torre_id", torres.map((t) => t.id));
+  const unidades = (unidadesData ?? []) as Pick<Unidade, "torre_id" | "numero">[];
+
+  const leituras: LeituraUnidade[] = [];
+
+  blocos.forEach((bloco, k) => {
+    const torre = torres[k];
+    const numeros = unidades
+      .filter((u) => u.torre_id === torre.id)
+      .map((u) => Number(u.numero))
+      .filter((n) => Number.isInteger(n));
+
+    const andarBase = numeros.length ? Math.min(...numeros.map((n) => Math.floor(n / 100))) : 1;
+    const colunaBase = numeros.length ? Math.min(...numeros.map((n) => n % 100)) : 1;
+    const colunas = bloco.linhas[0]?.length ?? 0;
+
+    const cabe = numeros.every(
+      (n) =>
+        Math.floor(n / 100) <= andarBase + bloco.linhas.length - 1 &&
+        n % 100 <= colunaBase + colunas - 1
+    );
+    if (!cabe) {
+      throw new Error(
+        `As unidades cadastradas de "${torre.nome}" não cabem na grade do ${k + 1}º bloco da foto. Confira se é a foto certa.`
+      );
+    }
+
+    bloco.linhas.forEach((linha, i) => {
+      linha.forEach((cor, j) => {
+        if (!cor) return;
+        if (distanciaCor(cor, COR_SEM_UNIDADE) <= 25) return;
+
+        const status = statusMaisProximo(cor, paleta);
+        if (!status) {
+          desconhecidas.add(rgbParaHex(cor));
+          return;
+        }
+        leituras.push({
+          torre: torre.nome,
+          numero: String((andarBase + i) * 100 + (colunaBase + j)),
+          status,
+        });
+      });
+    });
+  });
+
+  return leituras;
+}
+
+// Uma única entrada para o espelho de vendas: foto (.png) ou planilha (.xlsx/.xltx).
 export async function importarEspelhoVendas(empreendimentoId: string, formData: FormData) {
   await exigirAdmin();
   const supabase = await createClient();
   const arquivo = formData.get("arquivo") as File | null;
 
-  if (!arquivo || arquivo.size === 0) {
-    redirect(
-      `/empreendimentos/${empreendimentoId}?erroImportacao=${encodeURIComponent("Selecione um arquivo .xlsx")}`
+  function falhar(mensagem: string): never {
+    redirect(`/empreendimentos/${empreendimentoId}?erroImportacao=${encodeURIComponent(mensagem)}`);
+  }
+
+  if (!arquivo || arquivo.size === 0) falhar("Selecione a foto (.png) ou a planilha (.xlsx) do espelho de vendas.");
+
+  const nomeArquivo = arquivo.name.toLowerCase();
+  const ehImagem = nomeArquivo.endsWith(".png");
+  const ehPlanilha = /\.(xlsx|xltx)$/.test(nomeArquivo);
+  if (!ehImagem && !ehPlanilha) {
+    falhar(
+      nomeArquivo.endsWith(".xls")
+        ? 'O formato antigo .xls não é suportado. Abra no Excel e use "Salvar como" .xlsx.'
+        : "Formato não suportado. Envie a foto em .png ou a planilha em .xlsx."
     );
   }
 
-  const buffer = await arquivo.arrayBuffer();
-  const celulas = await parseEspelhoVendas(buffer);
+  const { data: statusData } = await supabase
+    .from("status_unidade")
+    .select("nome, cor, ordem")
+    .neq("nome", STATUS_NAO_INFORMADO)
+    .order("ordem");
+  const statusLista = (statusData ?? []) as { nome: string; cor: string; ordem: number }[];
+  const paleta: Paleta = statusLista.map((s) => ({ nome: s.nome, cor: s.cor }));
 
-  const { data: legendas } = await supabase
-    .from("legendas_cores")
-    .select("*")
-    .eq("empreendimento_id", empreendimentoId);
-  const statusPorCor = new Map<string, string>(
-    ((legendas ?? []) as LegendaCor[]).map((l) => [l.cor.toUpperCase(), l.status])
-  );
+  const desconhecidas = new Set<string>();
+  let leituras: LeituraUnidade[] = [];
+  let erro: string | null = null;
 
-  const coresDesconhecidas = new Set<string>();
-  const leituras: LeituraUnidade[] = [];
-  for (const celula of celulas) {
-    if (!celula.cor) continue;
-    const status = statusPorCor.get(celula.cor.toUpperCase());
-    if (!status) {
-      coresDesconhecidas.add(celula.cor);
-      continue;
+  try {
+    if (ehImagem) {
+      leituras = await leiturasDaImagem(
+        supabase,
+        empreendimentoId,
+        Buffer.from(await arquivo.arrayBuffer()),
+        paleta,
+        desconhecidas
+      );
+    } else {
+      const { origem, linhas } = await parseEspelhoExcel(await arquivo.arrayBuffer());
+      const statusPorTexto = new Map(statusLista.map((s) => [normalizarTexto(s.nome), s.nome]));
+      let semCor = 0;
+
+      for (const linha of linhas) {
+        let status: string | null = null;
+        if (origem === "coluna-status" && linha.statusTexto) {
+          status = statusPorTexto.get(normalizarTexto(linha.statusTexto)) ?? null;
+          if (!status) desconhecidas.add(linha.statusTexto);
+        } else if (linha.cor) {
+          const rgb = hexParaRgb(linha.cor);
+          status = rgb ? statusMaisProximo(rgb, paleta) : null;
+          if (!status) desconhecidas.add(linha.cor);
+        } else {
+          semCor++;
+        }
+        if (status) {
+          leituras.push({ torre: linha.torre, numero: linha.numero, status, areaM2: linha.areaM2 });
+        }
+      }
+
+      if (leituras.length === 0) {
+        erro =
+          origem === "coluna-status"
+            ? "Nenhum status da planilha corresponde à legenda do sistema."
+            : linhas.length === 0
+              ? 'Não encontrei unidades na planilha. Use uma tabela com as colunas "Unidade", "Bloco" e "Status", ou uma grade com o número de cada unidade em uma célula colorida.'
+              : `Encontrei ${linhas.length} unidade(s) na planilha, mas nenhuma com cor reconhecida (${semCor} sem cor de preenchimento).`;
+      }
     }
-    leituras.push({ torre: celula.torre, numero: celula.numero, status });
+  } catch (e) {
+    erro = e instanceof Error ? e.message : "Não foi possível ler o arquivo.";
   }
 
-  const resultado = await aplicarLeituraEspelho(empreendimentoId, leituras);
+  if (!erro && leituras.length === 0) erro = "Nenhuma unidade reconhecida no arquivo.";
+  if (erro) falhar(erro);
+
+  // Uma unidade repetida (ex.: várias linhas da mesma unidade) conta uma vez.
+  const unicas = new Map<string, LeituraUnidade>();
+  for (const l of leituras) unicas.set(`${l.torre}|${l.numero}`, l);
+  leituras = Array.from(unicas.values());
+
+  let resultado: Awaited<ReturnType<typeof aplicarLeituraEspelho>> | null = null;
+  try {
+    resultado = await aplicarLeituraEspelho(empreendimentoId, leituras);
+  } catch (e) {
+    erro = e instanceof Error ? e.message : "Erro ao gravar as unidades.";
+  }
+  if (!resultado) falhar(erro ?? "Erro ao gravar as unidades.");
+
+  const contagem = new Map<string, number>();
+  for (const l of leituras) contagem.set(l.status, (contagem.get(l.status) ?? 0) + 1);
+  const resumo = statusLista
+    .filter((s) => contagem.has(s.nome))
+    .map((s) => `${s.nome}:${contagem.get(s.nome)}`)
+    .join(",");
 
   const params = new URLSearchParams({
     importado: "1",
     total: String(resultado.total),
     criadas: String(resultado.criadas),
     atualizadas: String(resultado.atualizadas),
+    resumo,
   });
-  if (coresDesconhecidas.size > 0) {
-    params.set("desconhecidas", Array.from(coresDesconhecidas).join(","));
-  }
-  redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
-}
-
-// Colagem manual: uma linha por unidade, no formato "Bloco;Número;Status;Área(opcional)".
-// Usado quando os dados vêm de uma foto do espelho de vendas lida manualmente (por mim ou pelo analista),
-// em vez de um arquivo .xlsx com cores nas células.
-export async function importarLeituraManual(empreendimentoId: string, formData: FormData) {
-  await exigirAdmin();
-  const texto = String(formData.get("linhas") ?? "");
-
-  const leituras: LeituraUnidade[] = texto
-    .split("\n")
-    .map((linha) => linha.trim())
-    .filter(Boolean)
-    .map((linha) => {
-      const [torre, numero, status, area] = linha.split(";").map((v) => v.trim());
-      return { torre, numero, status, areaM2: area ? Number(area.replace(",", ".")) : null };
-    })
-    .filter((l) => l.torre && l.numero && l.status);
-
-  const resultado = await aplicarLeituraEspelho(empreendimentoId, leituras);
-
-  const params = new URLSearchParams({
-    importado: "1",
-    total: String(resultado.total),
-    criadas: String(resultado.criadas),
-    atualizadas: String(resultado.atualizadas),
-  });
+  if (desconhecidas.size > 0) params.set("desconhecidas", Array.from(desconhecidas).join(","));
   redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
 }
 
@@ -252,7 +363,7 @@ export async function cadastrarEmpreendimentoPorExcel(formData: FormData) {
   }
 
   const nomeInformado = String(formData.get("nome") ?? "").trim();
-  const nome = nomeInformado || arquivo.name.replace(/\.xlsx$/i, "").trim();
+  const nome = nomeInformado || arquivo.name.replace(/\.(xlsx|xltx)$/i, "").trim();
 
   let linhas: LinhaUnidade[] | null = null;
   let erroLeitura = "Não foi possível ler o arquivo.";

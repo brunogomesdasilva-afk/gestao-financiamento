@@ -125,14 +125,6 @@ export type HistoricoAlteracao = {
   created_at: string;
 };
 
-export type LegendaCor = {
-  id: string;
-  empreendimento_id: string;
-  cor: string;
-  status: string;
-  created_at: string;
-};
-
 export type HistoricoUnidade = {
   id: string;
   unidade_id: string;

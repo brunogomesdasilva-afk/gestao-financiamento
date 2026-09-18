@@ -2,16 +2,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { exigirAdmin } from "@/lib/auth";
-import type { Cliente, Empreendimento, LegendaCor, StatusUnidadeConfig, Torre, Unidade } from "@/lib/database.types";
-import {
-  atualizarStatusUnidade,
-  criarLegendaCor,
-  criarTorre,
-  criarUnidadesEmLote,
-  importarEspelhoVendas,
-  importarLeituraManual,
-  removerLegendaCor,
-} from "../actions";
+import { corDoTexto } from "@/lib/cores";
+import type { Cliente, Empreendimento, StatusUnidadeConfig, Torre, Unidade } from "@/lib/database.types";
+import { atualizarStatusUnidade, criarUnidadesEmLote, importarEspelhoVendas } from "../actions";
 import { UnidadeStatusForm } from "../UnidadeStatusForm";
 
 export default async function EmpreendimentoDetalhePage({
@@ -24,6 +17,7 @@ export default async function EmpreendimentoDetalhePage({
     total?: string;
     criadas?: string;
     atualizadas?: string;
+    resumo?: string;
     desconhecidas?: string;
     erroImportacao?: string;
   }>;
@@ -38,7 +32,6 @@ export default async function EmpreendimentoDetalhePage({
     { data: torres },
     { data: unidades },
     { data: clientes },
-    { data: legendas },
     { data: statusUnidade },
   ] = await Promise.all([
     supabase.from("empreendimentos").select("*").eq("id", id).single(),
@@ -49,7 +42,6 @@ export default async function EmpreendimentoDetalhePage({
       .eq("torres.empreendimento_id", id)
       .order("numero"),
     supabase.from("clientes").select("*").eq("empreendimento_id", id),
-    supabase.from("legendas_cores").select("*").eq("empreendimento_id", id),
     supabase.from("status_unidade").select("*").order("ordem"),
   ]);
 
@@ -57,7 +49,6 @@ export default async function EmpreendimentoDetalhePage({
   const empreendimentoTyped = empreendimento as Empreendimento;
   const torresTyped = (torres ?? []) as Torre[];
   const unidadesTyped = (unidades ?? []) as Unidade[];
-  const legendasTyped = (legendas ?? []) as LegendaCor[];
   const statusOpcoes = (statusUnidade ?? []) as StatusUnidadeConfig[];
   const statusPorNome = new Map<string, StatusUnidadeConfig>(statusOpcoes.map((s) => [s.nome, s]));
   const clientePorUnidade = new Map<string, Cliente>(
@@ -66,6 +57,15 @@ export default async function EmpreendimentoDetalhePage({
       .map((c) => [c.unidade_id as string, c])
   );
 
+  const totalPorStatus = new Map<string, number>();
+  for (const u of unidadesTyped) totalPorStatus.set(u.status, (totalPorStatus.get(u.status) ?? 0) + 1);
+  // Legenda igual à da foto; "Não informado" só aparece enquanto houver unidades sem status.
+  const legenda = statusOpcoes.filter((s) => s.nome !== "Não informado" || (totalPorStatus.get(s.nome) ?? 0) > 0);
+
+  const resumo = (sp.resumo ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((par) => par.split(":"));
   const desconhecidas = sp.desconhecidas ? sp.desconhecidas.split(",").filter(Boolean) : [];
 
   return (
@@ -87,16 +87,33 @@ export default async function EmpreendimentoDetalhePage({
       {sp.importado && (
         <div className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           <p>
-            Importação concluída: {sp.total} unidade(s) reconhecida(s), {sp.criadas} nova(s),{" "}
-            {sp.atualizadas} com status alterado desde a última importação.
+            Importação concluída: {sp.total} unidade(s) lida(s), {sp.criadas} nova(s), {sp.atualizadas} com
+            status alterado desde a última importação.
           </p>
+          {resumo.length > 0 && (
+            <p className="mt-1 text-emerald-700">
+              Leitura: {resumo.map(([nome, qtd]) => `${nome} ${qtd}`).join(" · ")}
+            </p>
+          )}
           {desconhecidas.length > 0 && (
             <p className="mt-1 text-amber-700">
-              Cores não mapeadas na legenda (unidades ignoradas): {desconhecidas.join(", ")}
+              Não reconhecidos na legenda (ignorados): {desconhecidas.join(", ")}
             </p>
           )}
         </div>
       )}
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {legenda.map((s) => (
+          <span
+            key={s.nome}
+            className="rounded border border-slate-300 px-2.5 py-1 text-xs font-medium"
+            style={{ backgroundColor: s.cor, color: corDoTexto(s.cor) }}
+          >
+            {s.nome}: {totalPorStatus.get(s.nome) ?? 0}
+          </span>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
@@ -116,8 +133,8 @@ export default async function EmpreendimentoDetalhePage({
                     return (
                       <div
                         key={unidade.id}
-                        className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-white"
-                        style={{ backgroundColor: cor, borderColor: cor }}
+                        className="flex items-center gap-1.5 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium"
+                        style={{ backgroundColor: cor, color: corDoTexto(cor) }}
                         title={cliente ? `Cliente: ${cliente.nome ?? "não informado"}` : undefined}
                       >
                         <Link
@@ -189,123 +206,23 @@ export default async function EmpreendimentoDetalhePage({
           )}
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="text-sm font-semibold text-slate-900">Nova torre</h2>
-            <form action={criarTorre.bind(null, id)} className="mt-4 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700">Nome da torre</label>
-                <input
-                  name="nome"
-                  required
-                  placeholder="Torre 1"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
-              >
-                Adicionar torre
-              </button>
-            </form>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="text-sm font-semibold text-slate-900">Legenda de cores</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Defina qual status cada cor do espelho de vendas representa. Usado ao importar a planilha.
-            </p>
-            <ul className="mt-3 space-y-2">
-              {legendasTyped.map((legenda) => (
-                <li key={legenda.id} className="flex items-center gap-2 text-sm">
-                  <span
-                    className="h-4 w-4 shrink-0 rounded border border-slate-300"
-                    style={{ backgroundColor: legenda.cor }}
-                  />
-                  <span className="text-slate-600">{legenda.cor}</span>
-                  <span className="text-slate-400">→</span>
-                  <span className="flex-1 text-slate-900">{legenda.status}</span>
-                  <form action={removerLegendaCor.bind(null, id, legenda.id)}>
-                    <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                      remover
-                    </button>
-                  </form>
-                </li>
-              ))}
-              {legendasTyped.length === 0 && (
-                <p className="text-xs text-slate-400">Nenhuma cor mapeada ainda.</p>
-              )}
-            </ul>
-            <form action={criarLegendaCor.bind(null, id)} className="mt-4 flex items-end gap-2">
-              <div>
-                <label className="block text-xs font-medium text-slate-700">Cor</label>
-                <input
-                  type="color"
-                  name="cor"
-                  defaultValue="#FF0000"
-                  className="mt-1 h-9 w-12 rounded-md border border-slate-300"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-slate-700">Status</label>
-                <select name="status" className="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                  {statusOpcoes.map((opcao) => (
-                    <option key={opcao.nome} value={opcao.nome}>
-                      {opcao.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="submit"
-                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
-              >
-                Adicionar
-              </button>
-            </form>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="text-sm font-semibold text-slate-900">Importar espelho de vendas (.xlsx)</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Envie a planilha colorida. Cada cor é convertida em status conforme a legenda acima; torres
-              são identificadas pelo nome da aba da planilha. Pode ser reenviada quantas vezes precisar —
-              só as unidades com status ou cor diferentes do último envio geram uma nova entrada no
-              histórico.
-            </p>
-            <form action={importarEspelhoVendas.bind(null, id)} className="mt-4 space-y-3">
-              <input type="file" name="arquivo" accept=".xlsx" required className="w-full text-sm" />
-              <button
-                type="submit"
-                className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
-              >
-                Importar
-              </button>
-            </form>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6">
-            <h2 className="text-sm font-semibold text-slate-900">Colar leitura de foto</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Quando os dados vêm de uma foto do espelho (lida manualmente), cole uma linha por unidade no
-              formato <code>Bloco;Número;Status;Área(opcional)</code>.
-            </p>
-            <form action={importarLeituraManual.bind(null, id)} className="mt-4 space-y-3">
-              <textarea
-                name="linhas"
-                rows={5}
-                placeholder={"Bloco 2;1307;Vendido;39\nBloco 1;2012;Permuta;39"}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-mono text-xs"
-              />
-              <button
-                type="submit"
-                className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
-              >
-                Gravar
-              </button>
-            </form>
-          </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-6 self-start">
+          <h2 className="text-sm font-semibold text-slate-900">Importar espelho de vendas</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Escolha a <strong>foto (.png)</strong> do espelho ou a <strong>planilha (.xlsx / .xltx)</strong>.
+            Na foto, o status de cada unidade vem da cor, conforme a legenda acima. Na planilha, vem da
+            coluna <strong>Status</strong> (ou das cores das células). Pode ser reenviado quantas vezes
+            precisar: só o que mudou desde a última importação entra no histórico da unidade.
+          </p>
+          <form action={importarEspelhoVendas.bind(null, id)} className="mt-4 space-y-3">
+            <input type="file" name="arquivo" accept=".png,.xlsx,.xltx" required className="w-full text-sm" />
+            <button
+              type="submit"
+              className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              Importar
+            </button>
+          </form>
         </div>
       </div>
     </div>

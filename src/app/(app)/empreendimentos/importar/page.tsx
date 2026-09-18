@@ -27,7 +27,7 @@ export default async function CadastrarEmpreendimentoPage({
       >
         <div>
           <label className="block text-sm font-medium text-slate-700">Planilha (.xlsx)</label>
-          <input type="file" name="arquivo" accept=".xlsx" required className="mt-1 w-full text-sm" />
+          <input type="file" name="arquivo" accept=".xlsx,.xltx" required className="mt-1 w-full text-sm" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">Nome do empreendimento</label>
