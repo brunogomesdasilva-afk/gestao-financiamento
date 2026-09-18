@@ -100,7 +100,7 @@ export default async function DashboardPage({
                       href={`/clientes/${cliente.id}`}
                       className="block rounded-md border border-slate-200 bg-white p-3 shadow-sm hover:border-slate-400"
                     >
-                      <p className="text-sm font-medium text-slate-900">{cliente.nome}</p>
+                      <p className="text-sm font-medium text-slate-900">{cliente.nome ?? "Proprietário não informado"}</p>
                       {empreendimento && (
                         <p className="mt-0.5 text-xs text-slate-500">
                           {empreendimento.nome}

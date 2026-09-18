@@ -4,20 +4,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_VENDIDO } from "@/lib/database.types";
+import { parseValorBR } from "@/lib/valores";
 
 function parseValor(raw: FormDataEntryValue | null) {
-  if (!raw) return null;
-  const num = Number(String(raw).replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(num) ? num : null;
+  return parseValorBR(String(raw ?? ""));
 }
 
 function texto(formData: FormData, campo: string) {
-  return String(formData.get(campo) ?? "") || null;
+  return String(formData.get(campo) ?? "").trim() || null;
 }
 
 function dadosDoFormulario(formData: FormData) {
   return {
-    nome: String(formData.get("nome") ?? ""),
+    nome: texto(formData, "nome"),
     cpf: texto(formData, "cpf"),
     telefone: texto(formData, "telefone"),
     email: texto(formData, "email"),
@@ -56,10 +55,9 @@ async function empreendimentoIdDaUnidade(
 export async function assumirUnidade(formData: FormData) {
   const supabase = await createClient();
   const unidadeId = texto(formData, "unidade_id");
-  const nome = String(formData.get("nome") ?? "").trim();
 
-  if (!unidadeId || !nome) {
-    redirect(`/clientes/novo?erro=${encodeURIComponent("Selecione a unidade e informe o nome do proprietário.")}`);
+  if (!unidadeId) {
+    redirect(`/clientes/novo?erro=${encodeURIComponent("Selecione o empreendimento, o bloco e a unidade.")}`);
   }
 
   const {
@@ -76,21 +74,25 @@ export async function assumirUnidade(formData: FormData) {
     redirect(`/clientes/novo?erro=${encodeURIComponent(`Só é possível assumir unidades com status ${STATUS_VENDIDO}.`)}`);
   }
 
-  const { data: primeiraEtapa } = await supabase
-    .from("etapas")
-    .select("id")
-    .order("ordem", { ascending: true })
-    .limit(1)
-    .single();
+  let etapaId = texto(formData, "etapa_id");
+  if (!etapaId) {
+    const { data: primeiraEtapa } = await supabase
+      .from("etapas")
+      .select("id")
+      .order("ordem", { ascending: true })
+      .limit(1)
+      .single();
+    etapaId = primeiraEtapa?.id ?? null;
+  }
 
   const { data: cliente, error } = await supabase
     .from("clientes")
     .insert({
-      nome,
+      ...dadosDoFormulario(formData),
       unidade_id: unidadeId,
       empreendimento_id: await empreendimentoIdDaUnidade(supabase, unidadeId),
       analista_responsavel_id: user.id,
-      etapa_atual_id: primeiraEtapa?.id ?? null,
+      etapa_atual_id: etapaId,
     })
     .select("id")
     .single();
@@ -105,14 +107,14 @@ export async function assumirUnidade(formData: FormData) {
 
   await supabase.from("andamento_historico").insert({
     cliente_id: cliente.id,
-    etapa_id: primeiraEtapa?.id ?? null,
+    etapa_id: etapaId,
     observacao: "Unidade assumida pelo analista",
     usuario_id: user.id,
   });
 
   revalidatePath("/");
   revalidatePath("/clientes/novo");
-  redirect(`/clientes/${cliente.id}/editar`);
+  redirect(`/clientes/${cliente.id}`);
 }
 
 export async function atualizarCliente(clienteId: string, formData: FormData) {

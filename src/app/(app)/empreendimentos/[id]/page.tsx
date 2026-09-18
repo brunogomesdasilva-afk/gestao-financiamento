@@ -116,7 +116,7 @@ export default async function EmpreendimentoDetalhePage({
                         key={unidade.id}
                         className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium text-white"
                         style={{ backgroundColor: cor, borderColor: cor }}
-                        title={cliente ? `Cliente: ${cliente.nome}` : undefined}
+                        title={cliente ? `Cliente: ${cliente.nome ?? "não informado"}` : undefined}
                       >
                         <Link
                           href={`/empreendimentos/${id}/unidades/${unidade.id}`}

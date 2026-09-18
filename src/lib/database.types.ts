@@ -56,7 +56,7 @@ export type ModalidadeFinanciamento = {
 
 export type Cliente = {
   id: string;
-  nome: string;
+  nome: string | null;
   cpf: string | null;
   telefone: string | null;
   email: string | null;

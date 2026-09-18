@@ -110,7 +110,7 @@ export default async function ClienteDetalhePage({
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-slate-900">{clienteTyped.nome}</h1>
+              <h1 className="text-lg font-semibold text-slate-900">{clienteTyped.nome ?? "Proprietário não informado"}</h1>
               {empreendimento && (
                 <p className="text-sm text-slate-500">
                   {empreendimento.nome}
