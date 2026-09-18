@@ -32,6 +32,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <Link href="/empreendimentos" className="text-sm text-slate-600 hover:text-slate-900">
               Empreendimentos
             </Link>
+            <Link href="/empreendimentos/importar" className="text-sm text-slate-600 hover:text-slate-900">
+              Cadastrar empreendimento
+            </Link>
           </nav>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-500">{nome}</span>

@@ -46,6 +46,7 @@ export type Unidade = {
 };
 
 export const STATUS_VENDIDO = "Vendido";
+export const STATUS_NAO_INFORMADO = "Não informado";
 
 export type ModalidadeFinanciamento = {
   id: string;

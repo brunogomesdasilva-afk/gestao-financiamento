@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parseEspelhoVendas } from "@/lib/espelhoVendas";
-import type { LegendaCor, Torre, Unidade } from "@/lib/database.types";
+import { parseListaUnidades, type LinhaUnidade } from "@/lib/listaUnidades";
+import { STATUS_NAO_INFORMADO, type LegendaCor, type Torre, type Unidade } from "@/lib/database.types";
 
 type LeituraUnidade = {
   torre: string;
@@ -95,14 +96,11 @@ export async function removerLegendaCor(empreendimentoId: string, legendaId: str
   revalidatePath(`/empreendimentos/${empreendimentoId}`);
 }
 
-// Cria as torres que faltam e grava/atualiza as unidades lidas, aproveitando o
-// gatilho do banco para logar automaticamente qualquer status/cor que tenha mudado
-// desde a última importação. Usado tanto pela importação de .xlsx quanto pela colagem
-// manual dos dados lidos de uma foto do espelho de vendas.
-async function aplicarLeituraEspelho(empreendimentoId: string, leituras: LeituraUnidade[]) {
-  const supabase = await createClient();
-
-  const nomesTorres = Array.from(new Set(leituras.map((l) => l.torre)));
+async function garantirTorres(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  empreendimentoId: string,
+  nomesTorres: string[]
+) {
   const { data: torresExistentes } = await supabase
     .from("torres")
     .select("id, nome")
@@ -123,6 +121,19 @@ async function aplicarLeituraEspelho(empreendimentoId: string, leituras: Leitura
       if (novaTorre) torreIdPorNome.set(novaTorre.nome, novaTorre.id);
     }
   }
+
+  return torreIdPorNome;
+}
+
+// Cria as torres que faltam e grava/atualiza as unidades lidas, aproveitando o
+// gatilho do banco para logar automaticamente qualquer status/cor que tenha mudado
+// desde a última importação. Usado tanto pela importação de .xlsx quanto pela colagem
+// manual dos dados lidos de uma foto do espelho de vendas.
+async function aplicarLeituraEspelho(empreendimentoId: string, leituras: LeituraUnidade[]) {
+  const supabase = await createClient();
+
+  const nomesTorres = Array.from(new Set(leituras.map((l) => l.torre)));
+  const torreIdPorNome = await garantirTorres(supabase, empreendimentoId, nomesTorres);
 
   const linhasParaGravar = leituras
     .map((l) => {
@@ -229,6 +240,93 @@ export async function importarLeituraManual(empreendimentoId: string, formData: 
     total: String(resultado.total),
     criadas: String(resultado.criadas),
     atualizadas: String(resultado.atualizadas),
+  });
+  redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
+}
+
+// Cadastra o empreendimento (nome do arquivo ou nome informado), suas torres e unidades a partir da
+// planilha "Unidade / Bloco". Pode ser reenviada: só entram as unidades que ainda não existem e o status
+// das já cadastradas não é alterado.
+export async function cadastrarEmpreendimentoPorExcel(formData: FormData) {
+  const supabase = await createClient();
+  const arquivo = formData.get("arquivo") as File | null;
+
+  if (!arquivo || arquivo.size === 0) {
+    redirect(`/empreendimentos/importar?erro=${encodeURIComponent("Selecione um arquivo .xlsx")}`);
+  }
+
+  const nomeInformado = String(formData.get("nome") ?? "").trim();
+  const nome = nomeInformado || arquivo.name.replace(/\.xlsx$/i, "").trim();
+
+  let linhas: LinhaUnidade[] | null = null;
+  let erroLeitura = "Não foi possível ler o arquivo.";
+  try {
+    linhas = await parseListaUnidades(await arquivo.arrayBuffer());
+  } catch (e) {
+    if (e instanceof Error) erroLeitura = e.message;
+  }
+
+  if (!linhas || linhas.length === 0) {
+    redirect(`/empreendimentos/importar?erro=${encodeURIComponent(linhas ? "Nenhuma unidade encontrada na planilha." : erroLeitura)}`);
+  }
+
+  const { data: existente } = await supabase
+    .from("empreendimentos")
+    .select("id")
+    .eq("nome", nome)
+    .limit(1)
+    .maybeSingle();
+
+  let empreendimentoId: string | undefined = existente?.id;
+  if (!empreendimentoId) {
+    const { data: novo, error } = await supabase
+      .from("empreendimentos")
+      .insert({ nome })
+      .select("id")
+      .single();
+    if (error || !novo) {
+      redirect(`/empreendimentos/importar?erro=${encodeURIComponent(error?.message ?? "Erro ao criar o empreendimento")}`);
+    }
+    empreendimentoId = novo.id as string;
+  }
+
+  const torreIdPorNome = await garantirTorres(
+    supabase,
+    empreendimentoId,
+    Array.from(new Set(linhas.map((l) => l.bloco)))
+  );
+
+  const { data: existentes } = await supabase
+    .from("unidades")
+    .select("torre_id, numero")
+    .in("torre_id", Array.from(torreIdPorNome.values()));
+  const jaCadastradas = new Set(
+    ((existentes ?? []) as Pick<Unidade, "torre_id" | "numero">[]).map((u) => `${u.torre_id}:${u.numero}`)
+  );
+
+  const novas = linhas
+    .map((l) => ({ torre_id: torreIdPorNome.get(l.bloco), numero: l.numero, status: STATUS_NAO_INFORMADO }))
+    .filter((u): u is { torre_id: string; numero: string; status: string } => Boolean(u.torre_id))
+    .filter((u) => !jaCadastradas.has(`${u.torre_id}:${u.numero}`));
+
+  for (let i = 0; i < novas.length; i += 500) {
+    const { error } = await supabase
+      .from("unidades")
+      .upsert(novas.slice(i, i + 500), { onConflict: "torre_id,numero", ignoreDuplicates: true });
+    if (error) {
+      redirect(`/empreendimentos/importar?erro=${encodeURIComponent(error.message)}`);
+    }
+  }
+
+  revalidatePath("/empreendimentos");
+  revalidatePath("/clientes/novo");
+  revalidatePath("/");
+
+  const params = new URLSearchParams({
+    importado: "1",
+    total: String(linhas.length),
+    criadas: String(novas.length),
+    atualizadas: "0",
   });
   redirect(`/empreendimentos/${empreendimentoId}?${params.toString()}`);
 }
