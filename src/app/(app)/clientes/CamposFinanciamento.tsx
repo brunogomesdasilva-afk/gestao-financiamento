@@ -3,11 +3,14 @@
 import { useState } from "react";
 import type { Banco } from "@/lib/bancos";
 import type { Cliente, ModalidadeFinanciamento } from "@/lib/database.types";
-import { paraCampoBR, parseValorBR } from "@/lib/valores";
 
 const CAMPO = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
+const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-function CampoValor({
+// Campo de valor em reais: só aceita números e mostra o valor formatado enquanto se digita
+// (os dígitos entram pelos centavos, como em um caixa eletrônico). O formulário envia o valor
+// puro (ex.: "250000,50") em um campo oculto.
+function CampoMoeda({
   nome,
   rotulo,
   valorInicial,
@@ -16,18 +19,35 @@ function CampoValor({
   nome: string;
   rotulo: string;
   valorInicial: number | null | undefined;
-  onChange?: (valor: string) => void;
+  onChange?: (valor: number | null) => void;
 }) {
+  const [centavos, setCentavos] = useState<number | null>(
+    valorInicial == null ? null : Math.round(valorInicial * 100)
+  );
+
+  function alterar(texto: string) {
+    const digitos = texto.replace(/\D/g, "").slice(0, 12);
+    const novo = digitos === "" ? null : Number(digitos);
+    setCentavos(novo);
+    onChange?.(novo == null ? null : novo / 100);
+  }
+
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700">{rotulo}</label>
       <input
-        name={nome}
-        inputMode="decimal"
-        placeholder="0,00"
-        defaultValue={paraCampoBR(valorInicial)}
-        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="R$ 0,00"
+        value={centavos == null ? "" : MOEDA.format(centavos / 100)}
+        onChange={(e) => alterar(e.target.value)}
         className={CAMPO}
+      />
+      <input
+        type="hidden"
+        name={nome}
+        value={centavos == null ? "" : (centavos / 100).toFixed(2).replace(".", ",")}
       />
     </div>
   );
@@ -43,10 +63,10 @@ export function CamposFinanciamento({
   bancos: Banco[];
   cliente?: Partial<Cliente>;
 }) {
-  const [aprovado, setAprovado] = useState(paraCampoBR(cliente?.valor_aprovado));
-  const [contratado, setContratado] = useState(paraCampoBR(cliente?.financiamento_contratado));
+  const [aprovado, setAprovado] = useState<number | null>(cliente?.valor_aprovado ?? null);
+  const [contratado, setContratado] = useState<number | null>(cliente?.financiamento_contratado ?? null);
 
-  const diferenca = (parseValorBR(aprovado) ?? 0) - (parseValorBR(contratado) ?? 0);
+  const diferenca = (aprovado ?? 0) - (contratado ?? 0);
 
   return (
     <div className="grid grid-cols-2 gap-4">
@@ -68,7 +88,13 @@ export function CamposFinanciamento({
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700">Agência</label>
-        <input name="agencia_financiamento" defaultValue={cliente?.agencia_financiamento ?? ""} className={CAMPO} />
+        <input
+          name="agencia_financiamento"
+          maxLength={4}
+          autoComplete="off"
+          defaultValue={cliente?.agencia_financiamento ?? ""}
+          className={CAMPO}
+        />
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700">Modalidade</label>
@@ -89,15 +115,15 @@ export function CamposFinanciamento({
         <label className="block text-sm font-medium text-slate-700">Validade da aprovação</label>
         <input name="validade" type="date" defaultValue={cliente?.validade ?? ""} className={CAMPO} />
       </div>
-      <CampoValor
+      <CampoMoeda
         nome="financiamento_contratado"
-        rotulo="Financiamento contratado (R$)"
+        rotulo="Financiamento contratado"
         valorInicial={cliente?.financiamento_contratado}
         onChange={setContratado}
       />
-      <CampoValor
+      <CampoMoeda
         nome="valor_aprovado"
-        rotulo="Valor aprovado (R$)"
+        rotulo="Valor aprovado"
         valorInicial={cliente?.valor_aprovado}
         onChange={setAprovado}
       />
@@ -105,15 +131,15 @@ export function CamposFinanciamento({
         <label className="block text-sm font-medium text-slate-700">Diferença (aprovado − contratado)</label>
         <input
           disabled
-          value={diferenca.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          value={MOEDA.format(diferenca)}
           className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
         />
       </div>
-      <CampoValor nome="fgts_contratado" rotulo="FGTS contratado (R$)" valorInicial={cliente?.fgts_contratado} />
-      <CampoValor nome="fgts_atualizacao" rotulo="FGTS atualização (R$)" valorInicial={cliente?.fgts_atualizacao} />
-      <CampoValor nome="terreno" rotulo="Terreno (R$)" valorInicial={cliente?.terreno} />
-      <CampoValor nome="seguro" rotulo="Seguro (R$)" valorInicial={cliente?.seguro} />
-      <CampoValor nome="escritura" rotulo="Escritura (R$)" valorInicial={cliente?.escritura} />
+      <CampoMoeda nome="fgts_contratado" rotulo="FGTS contratado" valorInicial={cliente?.fgts_contratado} />
+      <CampoMoeda nome="fgts_atualizacao" rotulo="FGTS atualização" valorInicial={cliente?.fgts_atualizacao} />
+      <CampoMoeda nome="terreno" rotulo="Terreno" valorInicial={cliente?.terreno} />
+      <CampoMoeda nome="seguro" rotulo="Seguro" valorInicial={cliente?.seguro} />
+      <CampoMoeda nome="escritura" rotulo="Escritura" valorInicial={cliente?.escritura} />
     </div>
   );
 }
