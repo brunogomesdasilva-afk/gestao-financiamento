@@ -51,10 +51,10 @@ const ITENS = [
     ),
   },
   {
-    href: "/empreendimentos/importar",
+    href: "/empreendimentos",
     rotulo: "Cadastrar empreendimento",
     somenteAdmin: true,
-    ativo: (p: string) => p === "/empreendimentos/importar",
+    ativo: (p: string) => p.startsWith("/empreendimentos"),
     icone: (
       <Icone>
         <circle cx="12" cy="12" r="10" />

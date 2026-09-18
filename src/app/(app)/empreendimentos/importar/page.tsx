@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { exigirAdmin } from "@/lib/auth";
 import { cadastrarEmpreendimentoPorExcel } from "../actions";
 
@@ -11,7 +12,10 @@ export default async function CadastrarEmpreendimentoPage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-lg font-semibold text-slate-900">Cadastrar empreendimento</h1>
+      <Link href="/empreendimentos" className="text-xs text-slate-500 hover:text-slate-900">
+        ← Empreendimentos cadastrados
+      </Link>
+      <h1 className="mt-1 text-lg font-semibold text-slate-900">Cadastrar novo empreendimento</h1>
       <p className="mt-1 text-sm text-slate-500">
         Escolha a planilha do empreendimento (pasta <strong>Empreendimentos</strong>). O sistema cria o
         empreendimento, as torres e todas as unidades de uma vez.
