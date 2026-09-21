@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gestão de Financiamento",
+  title: "Cred Imóveis | Gestão de Financiamento",
   description: "Conferência e andamento de clientes aprovados para financiamento imobiliário",
 };
 

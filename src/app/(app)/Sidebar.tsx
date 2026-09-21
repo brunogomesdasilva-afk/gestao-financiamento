@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -154,6 +155,17 @@ const ITENS: ItemMenu[] = [
     ],
   },
   {
+    href: "/conferencia-siop",
+    rotulo: "Conferência SIOP",
+    ativo: (p: string) => p.startsWith("/conferencia-siop"),
+    icone: (
+      <Icone>
+        <polyline points="9 11 12 14 22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </Icone>
+    ),
+  },
+  {
     href: "/usuarios",
     rotulo: "Usuários",
     somenteAdmin: true,
@@ -193,8 +205,8 @@ function LinkMenu({
         recolhido ? "justify-center" : ""
       } ${
         ativo
-          ? "bg-slate-100 font-medium text-slate-900"
-          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          ? "bg-white/10 font-medium text-white shadow-[inset_3px_0_0_var(--color-marca-claro)]"
+          : "text-slate-300 hover:bg-white/5 hover:text-white"
       }`}
     >
       {item.icone}
@@ -232,13 +244,26 @@ export function Sidebar({
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${
+      className={`sticky top-0 flex h-screen shrink-0 flex-col border-r border-grafite-escuro bg-grafite transition-[width] duration-200 ${
         recolhido ? "w-16" : "w-72"
       }`}
     >
-      <div className={`flex h-14 items-center border-b border-slate-200 ${recolhido ? "justify-center" : "justify-between px-4"}`}>
-        {!recolhido && (
-          <span className="truncate text-sm font-semibold text-slate-900">Gestão de Financiamento</span>
+      <div
+        className={`flex items-center border-b border-white/10 ${
+          recolhido ? "flex-col gap-2 py-3" : "justify-between gap-2 px-4 py-4"
+        }`}
+      >
+        {recolhido ? (
+          <Image src="/logo-icone.png" alt="Cred Imóveis" width={357} height={337} className="h-8 w-auto" priority />
+        ) : (
+          <Image
+            src="/logo-credimoveis.png"
+            alt="Cred Imóveis - consultoria em financiamento imobiliário"
+            width={972}
+            height={530}
+            className="h-auto w-40"
+            priority
+          />
         )}
         <button
           type="button"
@@ -246,7 +271,7 @@ export function Sidebar({
           aria-expanded={!recolhido}
           aria-label={recolhido ? "Expandir menu" : "Recolher menu"}
           title={recolhido ? "Expandir menu" : "Recolher menu"}
-          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
         >
           <Icone>
             {recolhido ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
@@ -277,7 +302,7 @@ export function Sidebar({
                     aria-expanded={submenuAberto}
                     aria-label={submenuAberto ? `Recolher ${item.rotulo}` : `Expandir ${item.rotulo}`}
                     title={submenuAberto ? "Recolher submenu" : "Expandir submenu"}
-                    className="ml-1 shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    className="ml-1 shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
                   >
                     <svg
                       width="16"
@@ -296,7 +321,7 @@ export function Sidebar({
                 )}
               </div>
               {item.filhos && !recolhido && submenuAberto && (
-                <div className="ml-5 space-y-1 border-l border-slate-200 pl-2">
+                <div className="ml-5 space-y-1 border-l border-white/15 pl-2">
                   {item.filhos.map((filho) => (
                     <LinkMenu key={filho.href} item={filho} pathname={pathname} recolhido={recolhido} filho />
                   ))}
@@ -307,9 +332,9 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-slate-200 p-2">
+      <div className="border-t border-white/10 p-2">
         {!recolhido && (
-          <p className="truncate px-3 py-1 text-xs text-slate-500">
+          <p className="truncate px-3 py-1 text-xs text-slate-400">
             {nome}
             {perfil === "admin" ? " · administrador" : ""}
           </p>
@@ -319,7 +344,7 @@ export function Sidebar({
             type="submit"
             title={recolhido ? "Sair" : undefined}
             aria-label="Sair"
-            className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 ${
+            className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white ${
               recolhido ? "justify-center" : ""
             }`}
           >

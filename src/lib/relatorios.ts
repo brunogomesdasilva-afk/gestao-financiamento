@@ -66,6 +66,7 @@ export type LinhaConsolidado = {
   agencia: string;
   modalidade: string;
   validade: string | null;
+  valorCompra: number | null;
   financiamentoContratado: number | null;
   valorAprovado: number | null;
   diferenca: number | null;
@@ -141,6 +142,7 @@ export async function carregarConsolidado(supabase: Supabase, situacao: Situacao
       agencia: c.agencia_financiamento ?? "",
       modalidade: (c.modalidade_financiamento_id ? modalidadePorId.get(c.modalidade_financiamento_id) : undefined) ?? "",
       validade: c.validade,
+      valorCompra: c.valor_compra ?? null,
       financiamentoContratado: c.financiamento_contratado,
       valorAprovado: c.valor_aprovado,
       diferenca: c.diferenca_aprovacao_contratado,

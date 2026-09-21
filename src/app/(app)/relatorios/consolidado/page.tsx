@@ -24,6 +24,7 @@ const CABECALHOS = [
   "Agência",
   "Modalidade",
   "Validade",
+  "Valor de compra",
   "Financ. contratado",
   "Valor aprovado",
   "Diferença",
@@ -64,7 +65,7 @@ export default async function ConsolidadoPage({
         </div>
         <a
           href={exportar}
-          className="shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          className="shrink-0 rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
         >
           Exportar para Excel
         </a>
@@ -115,7 +116,7 @@ export default async function ConsolidadoPage({
           </div>
           <button
             type="submit"
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            className="rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
           >
             Enviar relatório
           </button>
@@ -149,6 +150,7 @@ export default async function ConsolidadoPage({
                 <td className="px-3 py-2 text-slate-600">{l.agencia || "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{l.modalidade || "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{dataCurta(l.validade)}</td>
+                <td className="px-3 py-2 text-right text-slate-600">{moeda(l.valorCompra)}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{moeda(l.financiamentoContratado)}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{moeda(l.valorAprovado)}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{moeda(l.diferenca)}</td>

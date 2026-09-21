@@ -27,13 +27,13 @@ export default async function MetaPage({
       <div className="mt-4 inline-flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
         <Link
           href="/relatorios/meta"
-          className={`${ABA} ${situacao === "carteira" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+          className={`${ABA} ${situacao === "carteira" ? "bg-marca text-white" : "text-slate-600 hover:bg-slate-50"}`}
         >
           Em carteira
         </Link>
         <Link
           href="/relatorios/meta?situacao=todas"
-          className={`${ABA} ${situacao === "todas" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+          className={`${ABA} ${situacao === "todas" ? "bg-marca text-white" : "text-slate-600 hover:bg-slate-50"}`}
         >
           Todas (inclui encerradas)
         </Link>

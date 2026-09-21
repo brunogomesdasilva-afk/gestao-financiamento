@@ -135,7 +135,7 @@ export default async function EditarClientePage({
           <textarea name="observacoes" rows={3} defaultValue={clienteTyped.observacoes ?? ""} className={CAMPO} />
         </div>
 
-        <button type="submit" className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">
+        <button type="submit" className="w-full rounded-md bg-marca px-3 py-2 text-sm font-medium text-white hover:bg-marca-escuro">
           Salvar alterações
         </button>
       </form>

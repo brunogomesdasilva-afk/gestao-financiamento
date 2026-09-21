@@ -29,6 +29,7 @@ const COLUNAS: Coluna[] = [
   { titulo: "Agência", largura: 10, valor: (l) => l.agencia },
   { titulo: "Modalidade", largura: 24, valor: (l) => l.modalidade },
   { titulo: "Validade da aprovação", largura: 16, valor: (l) => data(l.validade), formato: "dd/mm/yyyy" },
+  { titulo: "Valor de compra e venda", largura: 20, valor: (l) => l.valorCompra, formato: MOEDA },
   { titulo: "Financiamento contratado", largura: 20, valor: (l) => l.financiamentoContratado, formato: MOEDA },
   { titulo: "Valor aprovado", largura: 16, valor: (l) => l.valorAprovado, formato: MOEDA },
   { titulo: "Diferença (aprovado − contratado)", largura: 22, valor: (l) => l.diferenca, formato: MOEDA },

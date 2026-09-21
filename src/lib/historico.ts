@@ -1,4 +1,5 @@
 const CAMPOS_MOEDA = new Set([
+  "valor_compra",
   "fgts_contratado",
   "financiamento_contratado",
   "fgts_atualizacao",

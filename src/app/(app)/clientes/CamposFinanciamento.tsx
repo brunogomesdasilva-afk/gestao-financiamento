@@ -116,6 +116,11 @@ export function CamposFinanciamento({
         <input name="validade" type="date" defaultValue={cliente?.validade ?? ""} className={CAMPO} />
       </div>
       <CampoMoeda
+        nome="valor_compra"
+        rotulo="Valor de compra e venda"
+        valorInicial={cliente?.valor_compra}
+      />
+      <CampoMoeda
         nome="financiamento_contratado"
         rotulo="Financiamento contratado"
         valorInicial={cliente?.financiamento_contratado}

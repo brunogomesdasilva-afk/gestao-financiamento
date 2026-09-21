@@ -67,6 +67,7 @@ export type Cliente = {
   banco_financiador: string | null;
   agencia_financiamento: string | null;
   modalidade_financiamento_id: string | null;
+  valor_compra: number | null;
   fgts_contratado: number | null;
   financiamento_contratado: number | null;
   fgts_atualizacao: number | null;
@@ -103,6 +104,7 @@ export const CAMPO_LABEL: Record<string, string> = {
   banco_financiador: "Banco financiador",
   agencia_financiamento: "Agência do financiamento",
   modalidade_financiamento_id: "Modalidade do financiamento",
+  valor_compra: "Valor de compra e venda",
   fgts_contratado: "FGTS contratado",
   financiamento_contratado: "Financiamento contratado",
   fgts_atualizacao: "FGTS atualização",

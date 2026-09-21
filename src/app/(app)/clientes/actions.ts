@@ -23,6 +23,7 @@ function dadosDoFormulario(formData: FormData) {
     banco_financiador: texto(formData, "banco_financiador"),
     agencia_financiamento: texto(formData, "agencia_financiamento")?.slice(0, 4) ?? null,
     modalidade_financiamento_id: texto(formData, "modalidade_financiamento_id"),
+    valor_compra: parseValor(formData.get("valor_compra")),
     fgts_contratado: parseValor(formData.get("fgts_contratado")),
     financiamento_contratado: parseValor(formData.get("financiamento_contratado")),
     fgts_atualizacao: parseValor(formData.get("fgts_atualizacao")),

@@ -107,7 +107,7 @@ export default async function AssumirUnidadePage({
 
           <button
             type="submit"
-            className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            className="w-full rounded-md bg-marca px-3 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
           >
             Assumir análise
           </button>

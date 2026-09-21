@@ -257,6 +257,10 @@ export default async function ClienteDetalhePage({
             <dd className="text-slate-900">{formatDataCurta(clienteTyped.validade)}</dd>
           </div>
           <div>
+            <dt className="text-slate-400">Valor de compra e venda</dt>
+            <dd className="text-slate-900">{formatMoeda(clienteTyped.valor_compra)}</dd>
+          </div>
+          <div>
             <dt className="text-slate-400">Financiamento contratado</dt>
             <dd className="text-slate-900">{formatMoeda(clienteTyped.financiamento_contratado)}</dd>
           </div>
