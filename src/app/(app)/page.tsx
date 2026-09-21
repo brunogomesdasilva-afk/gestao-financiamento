@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Empreendimento, Etapa, Torre, Unidade } from "@/lib/database.types";
+import { STATUS_VENDIDO, type Cliente, type Empreendimento, type Etapa, type Torre, type Unidade } from "@/lib/database.types";
 import { getPerfilAtual } from "@/lib/auth";
 import { buscarTodos } from "@/lib/paginacao";
 import { FiltrosClientes } from "./FiltrosClientes";
@@ -44,11 +44,12 @@ export default async function DashboardPage({
   const clientes = (clientesData ?? []) as Cliente[];
 
   // Todas as unidades (em páginas), em vez de filtrar por uma lista enorme de ids na URL da consulta.
-  const [unidades, { data: torresData }] = await Promise.all([
-    buscarTodos<Pick<Unidade, "id" | "torre_id" | "numero">>((de, ate) =>
-      supabase.from("unidades").select("id, torre_id, numero").order("id").range(de, ate)
+  const [unidades, { data: torresData }, { data: ocupadasData }] = await Promise.all([
+    buscarTodos<Pick<Unidade, "id" | "torre_id" | "numero" | "status">>((de, ate) =>
+      supabase.from("unidades").select("id, torre_id, numero, status").order("id").range(de, ate)
     ),
     supabase.from("torres").select("*"),
+    supabase.rpc("unidades_ocupadas"),
   ]);
 
   const empreendimentoPorId = new Map(((empreendimentos ?? []) as Empreendimento[]).map((e) => [e.id, e]));
@@ -83,6 +84,27 @@ export default async function DashboardPage({
     );
   }
 
+  // Unidades vendidas que nenhum analista assumiu ainda. Não pertencem a nenhum status da esteira,
+  // então só aparecem quando não há filtro de status nem de analista.
+  const mostrarSemAnalista = !etapaFiltro && !(ehAdmin && analistaFiltro);
+  const ocupadas = new Set((ocupadasData ?? []) as string[]);
+  const semAnalista = mostrarSemAnalista
+    ? unidades
+        .filter((u) => u.status === STATUS_VENDIDO && !ocupadas.has(u.id))
+        .map((u) => {
+          const torre = torrePorId.get(u.torre_id);
+          const emp = torre ? empreendimentoPorId.get(torre.empreendimento_id) : undefined;
+          return { id: u.id, empreendimentoId: emp?.id, empreendimento: emp?.nome ?? "—", torre: torre?.nome ?? "—", unidade: u.numero };
+        })
+        .filter((u) => !empreendimentoFiltro || u.empreendimentoId === empreendimentoFiltro)
+        .sort(
+          (a, b) =>
+            a.empreendimento.localeCompare(b.empreendimento, "pt-BR") ||
+            a.torre.localeCompare(b.torre, "pt-BR", { numeric: true }) ||
+            a.unidade.localeCompare(b.unidade, "pt-BR", { numeric: true })
+        )
+    : [];
+
   return (
     <div>
       <div className="mb-6">
@@ -100,6 +122,37 @@ export default async function DashboardPage({
       />
 
       <div className="space-y-4">
+        {mostrarSemAnalista && (
+          <details className="overflow-hidden rounded-xl border border-slate-200 bg-white" open={semAnalista.length > 0 && semAnalista.length <= 10}>
+            <summary className="flex cursor-pointer items-center gap-2 bg-slate-50 px-4 py-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
+              <h2 className="text-sm font-semibold text-slate-700">
+                Sem analista <span className="tabular-nums text-slate-500">({semAnalista.length})</span>
+              </h2>
+              <span className="text-xs text-slate-400">unidades vendidas que nenhum analista assumiu ainda</span>
+            </summary>
+            {semAnalista.length > 0 ? (
+              <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto border-t border-slate-200">
+                {semAnalista.map((u) => (
+                  <li key={u.id}>
+                    <Link
+                      href={`/empreendimentos/${u.empreendimentoId}/unidades/${u.id}`}
+                      className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-2 text-sm hover:bg-slate-50"
+                    >
+                      <span className="font-medium text-slate-900">{u.empreendimento}</span>
+                      <span className="text-slate-700">Unidade {u.unidade}</span>
+                      <span className="text-slate-500">{u.torre}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="border-t border-slate-200 px-4 py-3 text-xs text-slate-400">
+                Nenhuma unidade sem analista
+              </p>
+            )}
+          </details>
+        )}
         {etapasExibidas.map((etapa) => {
           const linhas = linhasPorEtapa.get(etapa.id) ?? [];
           return (
