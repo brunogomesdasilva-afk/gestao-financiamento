@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { exigirAdmin } from "@/lib/auth";
+import { formatarValorHistorico } from "@/lib/historico";
 import {
   CAMPO_LABEL,
   CAMPO_UNIDADE_LABEL,
@@ -15,16 +16,6 @@ import {
   type Torre,
   type Unidade,
 } from "@/lib/database.types";
-
-const CAMPOS_MOEDA = new Set([
-  "fgts_contratado",
-  "financiamento_contratado",
-  "fgts_atualizacao",
-  "valor_aprovado",
-  "terreno",
-  "seguro",
-  "escritura",
-]);
 
 const ORIGEM_ESTILO = {
   Unidade: "bg-slate-100 text-slate-600",
@@ -99,19 +90,8 @@ export default async function HistoricoUnidadePage({
     ((modalidadesData ?? []) as ModalidadeFinanciamento[]).map((m) => [m.id, m.nome])
   );
 
-  function formatarValor(campo: string, valor: string | null) {
-    if (valor == null || valor === "") return "—";
-    if (CAMPOS_MOEDA.has(campo)) {
-      const n = Number(valor);
-      return Number.isFinite(n) ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : valor;
-    }
-    if (campo === "modalidade_financiamento_id") return modalidadePorId.get(valor) ?? valor;
-    if (campo === "corretor_responsavel_id" || campo === "analista_responsavel_id") {
-      return usuarioPorId.get(valor)?.nome ?? valor;
-    }
-    if (campo === "validade") return new Date(`${valor}T00:00:00`).toLocaleDateString("pt-BR");
-    return valor;
-  }
+  const formatarValor = (campo: string, valor: string | null) =>
+    formatarValorHistorico(campo, valor, { modalidadePorId, usuarioPorId });
 
   const eventos: Evento[] = [];
 

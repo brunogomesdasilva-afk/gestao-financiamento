@@ -73,6 +73,13 @@ export function MenuAcoesUnidade({
             >
               Alterar cadastro da unidade
             </Link>
+            <Link
+              href={`/clientes/${clienteId}#historico`}
+              role="menuitem"
+              className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Consultar histórico de andamento da unidade
+            </Link>
             <form action={devolverAction}>
               <button
                 type="submit"

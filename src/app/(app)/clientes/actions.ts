@@ -151,28 +151,6 @@ export async function atualizarCliente(clienteId: string, formData: FormData) {
   redirect(`/clientes/${clienteId}`);
 }
 
-export async function avancarEtapa(clienteId: string, formData: FormData) {
-  const supabase = await createClient();
-  const etapaId = String(formData.get("etapa_id") ?? "");
-  const observacao = String(formData.get("observacao") ?? "") || null;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  await supabase.from("clientes").update({ etapa_atual_id: etapaId }).eq("id", clienteId);
-
-  await supabase.from("andamento_historico").insert({
-    cliente_id: clienteId,
-    etapa_id: etapaId,
-    observacao,
-    usuario_id: user?.id ?? null,
-  });
-
-  revalidatePath("/");
-  revalidatePath(`/clientes/${clienteId}`);
-}
-
 // Registra no histórico da unidade (aba "Andamento") uma ação feita sobre o acompanhamento do cliente.
 async function registrarAcao(
   supabase: Awaited<ReturnType<typeof createClient>>,
