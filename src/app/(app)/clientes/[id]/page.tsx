@@ -221,17 +221,9 @@ export default async function ClienteDetalhePage({
           </dl>
 
           <h2 className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Responsáveis
+            Responsável
           </h2>
           <dl className="mt-2 grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-slate-400">Corretor responsável</dt>
-              <dd className="text-slate-900">
-                {clienteTyped.corretor_responsavel_id
-                  ? usuariosPorId.get(clienteTyped.corretor_responsavel_id)?.nome ?? "—"
-                  : "—"}
-              </dd>
-            </div>
             <div>
               <dt className="text-slate-400">Analista responsável</dt>
               <dd className="text-slate-900">

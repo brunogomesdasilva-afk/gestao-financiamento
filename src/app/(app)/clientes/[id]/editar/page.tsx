@@ -1,6 +1,14 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Cliente, Empreendimento, ModalidadeFinanciamento, Profile, Torre, Unidade } from "@/lib/database.types";
+import type {
+  Cliente,
+  Empreendimento,
+  Etapa,
+  ModalidadeFinanciamento,
+  Profile,
+  Torre,
+  Unidade,
+} from "@/lib/database.types";
 import { getBancos } from "@/lib/bancos";
 import { atualizarCliente } from "../../actions";
 import { CamposFinanciamento } from "../../CamposFinanciamento";
@@ -18,15 +26,18 @@ export default async function EditarClientePage({
   const { erro } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cliente }, { data: usuarios }, { data: modalidades }, bancos] = await Promise.all([
-    supabase.from("clientes").select("*").eq("id", id).single(),
-    supabase.from("profiles").select("*").order("nome"),
-    supabase.from("modalidades_financiamento").select("*").order("ordem"),
-    getBancos(),
-  ]);
+  const [{ data: cliente }, { data: usuarios }, { data: modalidades }, { data: etapas }, bancos] =
+    await Promise.all([
+      supabase.from("clientes").select("*").eq("id", id).single(),
+      supabase.from("profiles").select("*").order("nome"),
+      supabase.from("modalidades_financiamento").select("*").order("ordem"),
+      supabase.from("etapas").select("*").order("ordem", { ascending: true }),
+      getBancos(),
+    ]);
 
   if (!cliente) notFound();
   const clienteTyped = cliente as Cliente;
+  const etapasTyped = (etapas ?? []) as Etapa[];
   const usuariosTyped = (usuarios as Profile[] | null) ?? [];
   const modalidadesTyped = (modalidades as ModalidadeFinanciamento[] | null) ?? [];
 
@@ -96,15 +107,14 @@ export default async function EditarClientePage({
         </section>
 
         <section>
-          <h2 className="text-sm font-semibold text-slate-900">Responsáveis</h2>
+          <h2 className="text-sm font-semibold text-slate-900">Andamento</h2>
           <div className="mt-3 grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700">Corretor responsável</label>
-              <select name="corretor_responsavel_id" defaultValue={clienteTyped.corretor_responsavel_id ?? ""} className={CAMPO}>
-                <option value="">Selecione</option>
-                {usuariosTyped.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
+              <label className="block text-sm font-medium text-slate-700">Status</label>
+              <select name="etapa_id" defaultValue={clienteTyped.etapa_atual_id ?? ""} className={CAMPO}>
+                {etapasTyped.map((etapa) => (
+                  <option key={etapa.id} value={etapa.id}>
+                    {etapa.nome}
                   </option>
                 ))}
               </select>

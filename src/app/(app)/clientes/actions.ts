@@ -31,7 +31,6 @@ function dadosDoFormulario(formData: FormData) {
     seguro: parseValor(formData.get("seguro")),
     escritura: parseValor(formData.get("escritura")),
     validade: texto(formData, "validade"),
-    corretor_responsavel_id: texto(formData, "corretor_responsavel_id"),
     observacoes: texto(formData, "observacoes"),
   };
 }
@@ -121,16 +120,33 @@ export async function assumirUnidade(formData: FormData) {
 export async function atualizarCliente(clienteId: string, formData: FormData) {
   const supabase = await createClient();
 
+  // O status (etapa) pode ser alterado aqui; quando muda, a troca fica registrada no histórico da unidade.
+  const novaEtapaId = texto(formData, "etapa_id");
+  const { data: atual } = await supabase
+    .from("clientes")
+    .select("etapa_atual_id")
+    .eq("id", clienteId)
+    .single();
+  const mudouEtapa = Boolean(novaEtapaId) && novaEtapaId !== atual?.etapa_atual_id;
+
   const { error } = await supabase
     .from("clientes")
-    .update(dadosDoFormulario(formData))
+    .update({
+      ...dadosDoFormulario(formData),
+      ...(mudouEtapa ? { etapa_atual_id: novaEtapaId } : {}),
+    })
     .eq("id", clienteId);
 
   if (error) {
     redirect(`/clientes/${clienteId}/editar?erro=${encodeURIComponent(error.message)}`);
   }
 
+  if (mudouEtapa) {
+    await registrarAcao(supabase, clienteId, novaEtapaId, "Status alterado na edição do cadastro");
+  }
+
   revalidatePath("/");
+  revalidatePath("/clientes");
   revalidatePath(`/clientes/${clienteId}`);
   redirect(`/clientes/${clienteId}`);
 }
