@@ -2,7 +2,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { exigirAdmin } from "@/lib/auth";
 import type { Profile } from "@/lib/database.types";
-import { alterarNomeUsuario, alterarPerfilUsuario, alterarStatusUsuario, criarUsuario } from "./actions";
+import {
+  alterarEmailUsuario,
+  alterarNomeUsuario,
+  alterarPerfilUsuario,
+  alterarStatusUsuario,
+  criarUsuario,
+} from "./actions";
+import { MenuAcoesUsuario } from "./MenuAcoesUsuario";
 
 const CAMPO = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
 const ROTULO_PERFIL = { admin: "Administrador", analista: "Analista" } as const;
@@ -52,10 +59,10 @@ async function unidadesDoUsuario(
 export default async function UsuariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; ok?: string; inativar?: string }>;
+  searchParams: Promise<{ erro?: string; ok?: string; inativar?: string; editarEmail?: string }>;
 }) {
   const atual = await exigirAdmin();
-  const { erro, ok, inativar } = await searchParams;
+  const { erro, ok, inativar, editarEmail } = await searchParams;
 
   const supabase = await createClient();
   const { data } = await supabase.from("profiles").select("*").order("nome");
@@ -64,7 +71,8 @@ export default async function UsuariosPage({
   const nomePorId = new Map(usuarios.map((u) => [u.id, u.nome]));
 
   const alvoInativar = inativar && inativar !== atual.id ? usuarios.find((u) => u.id === inativar && u.ativo !== false) : undefined;
-  const unidadesAlvo = alvoInativar ? await unidadesDoUsuario(supabase, alvoInativar.id) : [];
+  const alvoEmail = editarEmail ? usuarios.find((u) => u.id === editarEmail) : undefined;
+  const unidadesAlvo =alvoInativar ? await unidadesDoUsuario(supabase, alvoInativar.id) : [];
   const destinos = usuarios.filter((u) => u.ativo !== false && u.id !== alvoInativar?.id);
 
   return (
@@ -79,6 +87,38 @@ export default async function UsuariosPage({
 
         {erro && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
         {ok && <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{ok}</p>}
+
+        {alvoEmail && (
+          <form
+            action={alterarEmailUsuario.bind(null, alvoEmail.id)}
+            className="mt-4 rounded-xl border border-slate-300 bg-white p-5"
+          >
+            <h2 className="text-sm font-semibold text-slate-900">Alterar e-mail de {alvoEmail.nome}</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              O e-mail é o login do usuário. Depois da troca ele entra com o novo e-mail e a mesma senha.
+            </p>
+            <label className="mt-3 block text-sm font-medium text-slate-700">Novo e-mail</label>
+            <input
+              name="email"
+              type="email"
+              required
+              defaultValue={alvoEmail.email}
+              autoComplete="off"
+              className={CAMPO}
+            />
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="submit"
+                className="rounded-md bg-marca px-3 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
+              >
+                Salvar e-mail
+              </button>
+              <Link href="/usuarios" className="text-sm text-slate-600 underline hover:text-slate-900">
+                Cancelar
+              </Link>
+            </div>
+          </form>
+        )}
 
         {alvoInativar && (
           <form
@@ -186,43 +226,62 @@ export default async function UsuariosPage({
                     )}
                   </td>
                   <td className="px-4 py-2">
-                    {u.ativo === false ? (
+                    <div className="flex items-center justify-between gap-2">
                       <div>
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
-                          Inativo
-                        </span>
-                        {u.ativo_alterado_em && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            desde {new Date(u.ativo_alterado_em).toLocaleDateString("pt-BR")}
-                            {u.ativo_alterado_por && nomePorId.get(u.ativo_alterado_por)
-                              ? ` por ${nomePorId.get(u.ativo_alterado_por)}`
-                              : ""}
-                          </p>
+                        {u.ativo === false ? (
+                          <>
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+                              Inativo
+                            </span>
+                            {u.ativo_alterado_em && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                desde {new Date(u.ativo_alterado_em).toLocaleDateString("pt-BR")}
+                                {u.ativo_alterado_por && nomePorId.get(u.ativo_alterado_por)
+                                  ? ` por ${nomePorId.get(u.ativo_alterado_por)}`
+                                  : ""}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                            Ativo
+                          </span>
                         )}
-                        <form action={alterarStatusUsuario.bind(null, u.id)} className="mt-1">
-                          <input type="hidden" name="ativo" value="true" />
-                          <button type="submit" className="text-xs text-marca underline hover:text-marca-escuro">
-                            reativar
-                          </button>
-                        </form>
                       </div>
-                    ) : (
-                      <div>
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                          Ativo
-                        </span>
-                        {u.id !== atual.id && (
-                          <p className="mt-1">
-                            <Link
-                              href={`/usuarios?inativar=${u.id}`}
-                              className="text-xs text-slate-500 underline hover:text-red-700"
+                      <MenuAcoesUsuario>
+                        <Link
+                          href={`/usuarios?editarEmail=${u.id}`}
+                          role="menuitem"
+                          className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          Alterar e-mail
+                        </Link>
+                        {u.ativo === false ? (
+                          <form action={alterarStatusUsuario.bind(null, u.id)}>
+                            <input type="hidden" name="ativo" value="true" />
+                            <button
+                              type="submit"
+                              role="menuitem"
+                              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                             >
-                              inativar
-                            </Link>
-                          </p>
+                              Reativar usuário
+                            </button>
+                          </form>
+                        ) : u.id === atual.id ? (
+                          <span className="block px-4 py-2 text-sm text-slate-400">
+                            Você não pode inativar a si mesmo
+                          </span>
+                        ) : (
+                          <Link
+                            href={`/usuarios?inativar=${u.id}`}
+                            role="menuitem"
+                            className="block px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                          >
+                            Inativar usuário
+                          </Link>
                         )}
-                      </div>
-                    )}
+                      </MenuAcoesUsuario>
+                    </div>
                   </td>
                 </tr>
               ))}

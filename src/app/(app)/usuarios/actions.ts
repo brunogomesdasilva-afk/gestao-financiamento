@@ -77,6 +77,36 @@ export async function alterarPerfilUsuario(usuarioId: string, formData: FormData
   voltar({ ok: "Perfil atualizado." });
 }
 
+// O e-mail é o login do usuário: troca no Supabase Auth (precisa da chave de serviço) e no perfil.
+export async function alterarEmailUsuario(usuarioId: string, formData: FormData) {
+  await exigirAdmin();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) voltar({ erro: "Informe um e-mail válido.", editarEmail: usuarioId });
+
+  const admin = createAdminClient();
+  if (!admin) {
+    voltar({
+      erro: "Chave de serviço do Supabase não configurada (SUPABASE_SERVICE_ROLE_KEY).",
+      editarEmail: usuarioId,
+    });
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(usuarioId, { email, email_confirm: true });
+  if (error) {
+    const jaExiste = /already|registered|exists/i.test(error.message);
+    voltar({
+      erro: jaExiste ? "Já existe um usuário com esse e-mail." : error.message,
+      editarEmail: usuarioId,
+    });
+  }
+
+  const { error: erroPerfil } = await admin.from("profiles").update({ email }).eq("id", usuarioId);
+  if (erroPerfil) voltar({ erro: erroPerfil.message });
+
+  revalidatePath("/usuarios");
+  voltar({ ok: "E-mail atualizado. O usuário passa a entrar com o novo e-mail." });
+}
+
 // Ativa ou inativa um usuário (nunca exclui, para preservar o histórico). Ao inativar, as unidades
 // em andamento dele são transferidas ao analista escolhido, e cada transferência fica registrada
 // no histórico da unidade com o nome do administrador que fez a alteração.
