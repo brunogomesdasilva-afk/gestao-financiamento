@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { cookies } from "next/headers";
 import { getPerfilAtual } from "@/lib/auth";
 import { Sidebar } from "./Sidebar";
@@ -18,7 +19,19 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         recolhidoInicial={recolhido}
         submenusIniciais={submenusAbertos}
       />
-      <main className="min-w-0 flex-1 px-6 py-8">{children}</main>
+      <main className="min-w-0 flex-1 px-6 py-6">
+        <div className="mb-2 flex justify-end">
+          <Image
+            src="/logo-credimoveis-fundo-claro.png"
+            alt="Cred Imóveis"
+            width={972}
+            height={530}
+            className="h-auto w-24"
+            priority
+          />
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

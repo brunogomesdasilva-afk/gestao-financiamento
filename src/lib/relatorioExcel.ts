@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import ExcelJS from "exceljs";
 import type { LinhaConsolidado } from "@/lib/relatorios";
 
@@ -43,28 +45,48 @@ const COLUNAS: Coluna[] = [
   { titulo: "Observações", largura: 40, valor: (l) => l.observacoes },
 ];
 
+// As primeiras linhas da planilha são reservadas ao logo; o cabeçalho da tabela vem logo abaixo.
+const LINHAS_DO_LOGO = 4;
+const ALTURA_LINHA_LOGO = 18;
+const LOGO_ALTURA_PX = 70;
+const LOGO_LARGURA_PX = Math.round((LOGO_ALTURA_PX * 972) / 530);
+const LINHA_CABECALHO = LINHAS_DO_LOGO + 1;
+
 export async function gerarExcelConsolidado(linhas: LinhaConsolidado[]): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const planilha = workbook.addWorksheet("Consolidado");
 
-  planilha.columns = COLUNAS.map((c) => ({ header: c.titulo, width: c.largura }));
+  COLUNAS.forEach((c, i) => {
+    const coluna = planilha.getColumn(i + 1);
+    coluna.width = c.largura;
+    if (c.formato) coluna.numFmt = c.formato;
+  });
 
+  for (let i = 1; i <= LINHAS_DO_LOGO; i++) planilha.getRow(i).height = ALTURA_LINHA_LOGO;
+  const logo = workbook.addImage({
+    buffer: (await fs.readFile(path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "logo-credimoveis-fundo-claro.png"))) as unknown as ExcelJS.Buffer,
+    extension: "png",
+  });
+  planilha.addImage(logo, { tl: { col: 0.1, row: 0.2 }, ext: { width: LOGO_LARGURA_PX, height: LOGO_ALTURA_PX } });
+
+  const cabecalho = planilha.getRow(LINHA_CABECALHO);
+  COLUNAS.forEach((c, i) => {
+    cabecalho.getCell(i + 1).value = c.titulo;
+  });
   for (const linha of linhas) {
     planilha.addRow(COLUNAS.map((c) => c.valor(linha)));
   }
 
-  COLUNAS.forEach((c, i) => {
-    if (c.formato) planilha.getColumn(i + 1).numFmt = c.formato;
-  });
-
-  const cabecalho = planilha.getRow(1);
   cabecalho.font = { bold: true };
   cabecalho.alignment = { vertical: "middle", wrapText: true };
   cabecalho.eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
   });
-  planilha.views = [{ state: "frozen", ySplit: 1 }];
-  planilha.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUNAS.length } };
+  planilha.views = [{ state: "frozen", ySplit: LINHA_CABECALHO }];
+  planilha.autoFilter = {
+    from: { row: LINHA_CABECALHO, column: 1 },
+    to: { row: LINHA_CABECALHO, column: COLUNAS.length },
+  };
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
