@@ -14,7 +14,10 @@ export async function getPerfilAtual(): Promise<PerfilAtual | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data } = await supabase.from("profiles").select("nome, perfil").eq("id", user.id).single();
+  const { data } = await supabase.from("profiles").select("nome, perfil, ativo").eq("id", user.id).single();
+
+  // Usuário inativo não tem mais acesso (o proxy encerra a sessão dele).
+  if (data?.ativo === false) return null;
 
   return {
     id: user.id,

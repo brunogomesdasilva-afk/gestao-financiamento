@@ -76,3 +76,73 @@ export async function alterarPerfilUsuario(usuarioId: string, formData: FormData
   revalidatePath("/usuarios");
   voltar({ ok: "Perfil atualizado." });
 }
+
+// Ativa ou inativa um usuário (nunca exclui, para preservar o histórico). Ao inativar, as unidades
+// em andamento dele são transferidas ao analista escolhido, e cada transferência fica registrada
+// no histórico da unidade com o nome do administrador que fez a alteração.
+export async function alterarStatusUsuario(usuarioId: string, formData: FormData) {
+  const atual = await exigirAdmin();
+  const ativar = String(formData.get("ativo") ?? "") === "true";
+  const destinoId = String(formData.get("destino") ?? "");
+
+  if (usuarioId === atual.id) voltar({ erro: "Você não pode inativar o seu próprio usuário." });
+
+  const supabase = await createClient();
+  const { data: alvo } = await supabase.from("profiles").select("id, nome").eq("id", usuarioId).single();
+  if (!alvo) voltar({ erro: "Usuário não encontrado." });
+
+  if (!ativar) {
+    const { data: carteira } = await supabase
+      .from("clientes")
+      .select("id, etapa_atual_id")
+      .eq("analista_responsavel_id", usuarioId)
+      .eq("arquivado", false);
+    const clientes = carteira ?? [];
+
+    if (clientes.length > 0) {
+      if (!destinoId || destinoId === usuarioId) {
+        voltar({ erro: "Escolha para quem enviar as unidades deste usuário.", inativar: usuarioId });
+      }
+      const { data: destino } = await supabase
+        .from("profiles")
+        .select("id, nome, ativo")
+        .eq("id", destinoId)
+        .single();
+      if (!destino || destino.ativo === false) {
+        voltar({ erro: "O usuário de destino precisa estar ativo.", inativar: usuarioId });
+      }
+
+      const { error: erroTransf } = await supabase
+        .from("clientes")
+        .update({ analista_responsavel_id: destinoId })
+        .eq("analista_responsavel_id", usuarioId)
+        .eq("arquivado", false);
+      if (erroTransf) voltar({ erro: erroTransf.message, inativar: usuarioId });
+
+      const observacao = `Unidade transferida de ${alvo.nome} para ${destino.nome}: ${alvo.nome} foi inativado por ${atual.nome}.`;
+      await supabase.from("andamento_historico").insert(
+        clientes.map((c) => ({
+          cliente_id: c.id,
+          etapa_id: c.etapa_atual_id,
+          observacao,
+          usuario_id: atual.id,
+        }))
+      );
+    }
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ ativo: ativar, ativo_alterado_em: new Date().toISOString(), ativo_alterado_por: atual.id })
+    .eq("id", usuarioId);
+  if (error) voltar({ erro: error.message });
+
+  // Bloqueia também no Supabase Auth (encerra sessões e impede novo login), se a chave estiver configurada.
+  const admin = createAdminClient();
+  if (admin) {
+    await admin.auth.admin.updateUserById(usuarioId, { ban_duration: ativar ? "none" : "876000h" });
+  }
+
+  revalidatePath("/", "layout");
+  voltar({ ok: ativar ? `${alvo.nome} foi reativado.` : `${alvo.nome} foi inativado.` });
+}

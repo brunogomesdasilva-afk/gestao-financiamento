@@ -3,6 +3,9 @@ export type Profile = {
   nome: string;
   email: string;
   perfil: "admin" | "analista";
+  ativo: boolean;
+  ativo_alterado_em: string | null;
+  ativo_alterado_por: string | null;
   created_at: string;
 };
 
