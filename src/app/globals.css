@@ -9,6 +9,11 @@
   --color-grafite-escuro: #272a2d;
 }
 
+/* Tamanho-base do sistema (o padrão do navegador é 16px). Textos e espaçamentos acompanham. */
+html {
+  font-size: 14.5px;
+}
+
 body {
   background: #f8fafc;
   color: #0f172a;
