@@ -12,11 +12,13 @@ export type LinhaFiltro = {
   etapaOrdem: number;
 };
 
-export type SelecaoCarteira = {
+export type SelecaoFiltros = {
   empreendimento: string;
   bloco: string;
   unidade: string;
   status: string;
+  analista?: string;
+  situacao?: string;
 };
 
 const SELECT = "mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm";
@@ -31,14 +33,21 @@ function unicos<T>(itens: T[], chave: (i: T) => string): T[] {
   });
 }
 
-// Filtros da carteira. As opções vêm só das unidades que o analista tem e se ajustam em cascata:
-// escolher um empreendimento reduz os blocos, e escolher um bloco reduz as unidades.
+// Filtros de empreendimento, bloco, unidade e status (e, opcionalmente, analista e situação).
+// As opções vêm só das linhas recebidas e se ajustam em cascata: escolher um empreendimento reduz os
+// blocos, e escolher um bloco reduz as unidades. A escolha vai para o endereço da página.
 export function FiltrosCarteira({
   linhas,
   selecao,
+  caminho = "/clientes",
+  analistas,
+  mostrarSituacao = false,
 }: {
   linhas: LinhaFiltro[];
-  selecao: SelecaoCarteira;
+  selecao: SelecaoFiltros;
+  caminho?: string;
+  analistas?: { id: string; nome: string }[];
+  mostrarSituacao?: boolean;
 }) {
   const router = useRouter();
 
@@ -58,17 +67,26 @@ export function FiltrosCarteira({
   );
   const statusLista = unicos(linhas, (l) => l.etapaId).sort((a, b) => a.etapaOrdem - b.etapaOrdem);
 
-  function aplicar(nova: SelecaoCarteira) {
+  function aplicar(nova: SelecaoFiltros) {
     const params = new URLSearchParams();
     if (nova.empreendimento) params.set("empreendimento", nova.empreendimento);
     if (nova.bloco) params.set("bloco", nova.bloco);
     if (nova.unidade) params.set("unidade", nova.unidade);
     if (nova.status) params.set("status", nova.status);
+    if (nova.analista) params.set("analista", nova.analista);
+    if (nova.situacao && nova.situacao !== "carteira") params.set("situacao", nova.situacao);
     const consulta = params.toString();
-    router.push(consulta ? `/clientes?${consulta}` : "/clientes");
+    router.push(consulta ? `${caminho}?${consulta}` : caminho);
   }
 
-  const temFiltro = Boolean(selecao.empreendimento || selecao.bloco || selecao.unidade || selecao.status);
+  const temFiltro = Boolean(
+    selecao.empreendimento ||
+      selecao.bloco ||
+      selecao.unidade ||
+      selecao.status ||
+      selecao.analista ||
+      (selecao.situacao && selecao.situacao !== "carteira")
+  );
 
   return (
     <div className="mt-6 flex flex-wrap items-end gap-3">
@@ -88,7 +106,7 @@ export function FiltrosCarteira({
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-700">Bloco</label>
+        <label className="block text-xs font-medium text-slate-700">Bloco / torre</label>
         <select
           value={selecao.bloco}
           onChange={(e) => aplicar({ ...selecao, bloco: e.target.value, unidade: "" })}
@@ -117,6 +135,23 @@ export function FiltrosCarteira({
           ))}
         </select>
       </div>
+      {analistas && (
+        <div>
+          <label className="block text-xs font-medium text-slate-700">Analista</label>
+          <select
+            value={selecao.analista ?? ""}
+            onChange={(e) => aplicar({ ...selecao, analista: e.target.value })}
+            className={SELECT}
+          >
+            <option value="">Todos</option>
+            {analistas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="block text-xs font-medium text-slate-700">Status</label>
         <select
@@ -132,10 +167,23 @@ export function FiltrosCarteira({
           ))}
         </select>
       </div>
+      {mostrarSituacao && (
+        <div>
+          <label className="block text-xs font-medium text-slate-700">Unidades</label>
+          <select
+            value={selecao.situacao ?? "carteira"}
+            onChange={(e) => aplicar({ ...selecao, situacao: e.target.value })}
+            className={SELECT}
+          >
+            <option value="carteira">Em carteira</option>
+            <option value="todas">Todas (inclui encerradas)</option>
+          </select>
+        </div>
+      )}
       {temFiltro && (
         <button
           type="button"
-          onClick={() => router.push("/clientes")}
+          onClick={() => router.push(caminho)}
           className="text-xs text-slate-500 underline hover:text-slate-900"
         >
           Limpar filtros

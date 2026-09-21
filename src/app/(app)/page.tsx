@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente, Empreendimento, Etapa, Torre, Unidade } from "@/lib/database.types";
 import { getPerfilAtual } from "@/lib/auth";
+import { buscarTodos } from "@/lib/paginacao";
 import { FiltrosClientes } from "./FiltrosClientes";
 
 type LinhaPainel = {
@@ -10,6 +11,7 @@ type LinhaPainel = {
   empreendimento: string;
   unidade: string;
   torre: string;
+  analista: string;
 };
 
 export default async function DashboardPage({
@@ -41,20 +43,18 @@ export default async function DashboardPage({
     ]);
   const clientes = (clientesData ?? []) as Cliente[];
 
-  const unidadeIds = clientes.map((c) => c.unidade_id).filter((id): id is string => Boolean(id));
-  const { data: unidadesData } = unidadeIds.length
-    ? await supabase.from("unidades").select("*").in("id", unidadeIds)
-    : { data: [] };
-  const unidades = (unidadesData ?? []) as Unidade[];
-
-  const torreIds = Array.from(new Set(unidades.map((u) => u.torre_id)));
-  const { data: torresData } = torreIds.length
-    ? await supabase.from("torres").select("*").in("id", torreIds)
-    : { data: [] };
+  // Todas as unidades (em páginas), em vez de filtrar por uma lista enorme de ids na URL da consulta.
+  const [unidades, { data: torresData }] = await Promise.all([
+    buscarTodos<Pick<Unidade, "id" | "torre_id" | "numero">>((de, ate) =>
+      supabase.from("unidades").select("id, torre_id, numero").order("id").range(de, ate)
+    ),
+    supabase.from("torres").select("*"),
+  ]);
 
   const empreendimentoPorId = new Map(((empreendimentos ?? []) as Empreendimento[]).map((e) => [e.id, e]));
   const unidadePorId = new Map(unidades.map((u) => [u.id, u]));
   const torrePorId = new Map(((torresData ?? []) as Torre[]).map((t) => [t.id, t]));
+  const nomeAnalistaPorId = new Map(((usuarios ?? []) as { id: string; nome: string }[]).map((u) => [u.id, u.nome]));
 
   const etapasTyped = (etapas as Etapa[] | null) ?? [];
   const etapasExibidas = etapaFiltro ? etapasTyped.filter((e) => e.id === etapaFiltro) : etapasTyped;
@@ -68,6 +68,7 @@ export default async function DashboardPage({
       empreendimento: (c.empreendimento_id ? empreendimentoPorId.get(c.empreendimento_id)?.nome : undefined) ?? "—",
       unidade: unidade?.numero ?? "—",
       torre: (unidade ? torrePorId.get(unidade.torre_id)?.nome : undefined) ?? "—",
+      analista: (c.analista_responsavel_id ? nomeAnalistaPorId.get(c.analista_responsavel_id) : undefined) ?? "—",
     };
     const chave = c.etapa_atual_id ?? "sem-etapa";
     if (!linhasPorEtapa.has(chave)) linhasPorEtapa.set(chave, []);
@@ -84,19 +85,9 @@ export default async function DashboardPage({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Andamento dos clientes</h1>
-          <p className="text-sm text-slate-500">
-            {clientes.length} cliente(s) aprovado(s) em acompanhamento
-          </p>
-        </div>
-        <Link
-          href="/clientes/novo"
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          Assumir unidade
-        </Link>
+      <div className="mb-6">
+        <h1 className="text-lg font-semibold text-slate-900">Andamento dos clientes</h1>
+        <p className="text-sm text-slate-500">{clientes.length} cliente(s) aprovado(s) em acompanhamento</p>
       </div>
 
       <FiltrosClientes
@@ -128,6 +119,7 @@ export default async function DashboardPage({
                         <span className="font-medium text-slate-900">{l.empreendimento}</span>
                         <span className="text-slate-700">Unidade {l.unidade}</span>
                         <span className="text-slate-500">{l.torre}</span>
+                        <span className="text-slate-500">Analista: {l.analista}</span>
                       </Link>
                     </li>
                   ))}
