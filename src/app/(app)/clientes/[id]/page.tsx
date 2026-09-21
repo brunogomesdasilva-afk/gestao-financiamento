@@ -21,14 +21,6 @@ function formatMoeda(valor: number | null) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function formatData(data: string) {
-  return new Date(data).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "America/Sao_Paulo",
-  });
-}
-
 function formatDataCurta(data: string | null) {
   if (!data) return "—";
   return new Date(data).toLocaleDateString("pt-BR", { dateStyle: "short" });
@@ -36,6 +28,14 @@ function formatDataCurta(data: string | null) {
 
 // Registros automáticos do sistema que não precisam repetir a observação na linha do tempo.
 const OBSERVACAO_AUTOMATICA_STATUS = "Status alterado na edição do cadastro";
+
+type GrupoHistorico = {
+  chave: string;
+  dia: string;
+  usuarioId: string | null;
+  ultimaData: string;
+  itens: EventoHistorico[];
+};
 
 type EventoHistorico = {
   chave: string;
@@ -160,7 +160,21 @@ export default async function ClienteDetalhePage({
     });
   }
 
-  eventos.sort((x, y) => y.data.localeCompare(x.data));
+  // O que um mesmo analista fez no mesmo dia vira um bloco só, com um texto único.
+  // Os blocos ficam do mais recente para o mais antigo; dentro do bloco, na ordem em que aconteceu.
+  const grupos = new Map<string, GrupoHistorico>();
+  for (const e of [...eventos].sort((x, y) => x.data.localeCompare(y.data))) {
+    const dia = new Date(e.data).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const chave = `${dia}|${e.usuarioId ?? "sistema"}`;
+    const grupo = grupos.get(chave);
+    if (grupo) {
+      grupo.itens.push(e);
+      grupo.ultimaData = e.data;
+    } else {
+      grupos.set(chave, { chave, dia, usuarioId: e.usuarioId, ultimaData: e.data, itens: [e] });
+    }
+  }
+  const gruposOrdenados = Array.from(grupos.values()).sort((a, b) => b.ultimaData.localeCompare(a.ultimaData));
 
   const arquivarComId = arquivarCliente.bind(null, id, !clienteTyped.arquivado);
 
@@ -300,28 +314,36 @@ export default async function ClienteDetalhePage({
         <h2 className="text-sm font-semibold text-slate-900">Histórico de alterações</h2>
         <p className="mt-1 text-xs text-slate-400">Da mais recente para a mais antiga.</p>
         <ol className="mt-4 space-y-4">
-          {eventos.map((e) => {
-            const usuario = e.usuarioId ? usuariosPorId.get(e.usuarioId) : null;
+          {gruposOrdenados.map((g) => {
+            const usuario = g.usuarioId ? usuariosPorId.get(g.usuarioId) : null;
             return (
-              <li key={e.chave} className="border-l-2 border-slate-200 pl-4 text-sm">
-                {e.campo ? (
-                  <p className="text-slate-900">
-                    O campo <span className="font-medium">{e.campo}</span> foi alterado de{" "}
-                    <span className="text-slate-500">&ldquo;{e.antes}&rdquo;</span> para{" "}
-                    <span className="font-medium text-slate-800">&ldquo;{e.depois}&rdquo;</span>
-                  </p>
-                ) : (
-                  <p className="font-medium text-slate-900">{e.texto}</p>
-                )}
-                {e.detalhe && <p className="mt-0.5 text-slate-600">{e.detalhe}</p>}
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {formatData(e.data)}
-                  {usuario ? ` · ${usuario.nome}` : ""}
+              <li key={g.chave} className="overflow-hidden rounded-lg border border-slate-200 text-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2">
+                  <span className="font-medium text-slate-900">
+                    Analista: {usuario ? usuario.nome : "Sistema"}
+                  </span>
+                  <span className="text-xs text-slate-500">{g.dia}</span>
+                </div>
+                <p className="px-4 py-3 leading-relaxed text-slate-700">
+                  {g.itens.map((e) => (
+                    <span key={e.chave}>
+                      {e.campo ? (
+                        <>
+                          O campo <span className="font-medium text-slate-900">{e.campo}</span> foi alterado de{" "}
+                          <span className="text-slate-500">&ldquo;{e.antes}&rdquo;</span> para{" "}
+                          <span className="font-medium text-slate-900">&ldquo;{e.depois}&rdquo;</span>
+                        </>
+                      ) : (
+                        <span className="font-medium text-slate-900">{e.texto}</span>
+                      )}
+                      {e.detalhe ? ` (${e.detalhe})` : ""}.{" "}
+                    </span>
+                  ))}
                 </p>
               </li>
             );
           })}
-          {eventos.length === 0 && <p className="text-sm text-slate-400">Nenhum registro ainda.</p>}
+          {gruposOrdenados.length === 0 && <p className="text-sm text-slate-400">Nenhum registro ainda.</p>}
         </ol>
       </div>
     </div>
