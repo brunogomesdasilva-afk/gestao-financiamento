@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { exigirAdmin } from "@/lib/auth";
 import type { Profile } from "@/lib/database.types";
-import { alterarPerfilUsuario, criarUsuario } from "./actions";
+import { alterarNomeUsuario, alterarPerfilUsuario, criarUsuario } from "./actions";
 
 const CAMPO = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
 const ROTULO_PERFIL = { admin: "Administrador", analista: "Analista" } as const;
@@ -25,7 +25,8 @@ export default async function UsuariosPage({
         <h1 className="text-lg font-semibold text-slate-900">Usuários</h1>
         <p className="mt-1 text-sm text-slate-500">
           Administradores veem e gerenciam tudo. Analistas veem só as unidades que assumiram e as que
-          estão livres para assumir.
+          estão livres para assumir. O nome é o que aparece nos históricos e na carteira, no lugar do
+          e-mail.
         </p>
 
         {erro && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
@@ -43,7 +44,20 @@ export default async function UsuariosPage({
             <tbody className="divide-y divide-slate-100">
               {usuarios.map((u) => (
                 <tr key={u.id}>
-                  <td className="px-4 py-2 text-slate-900">{u.nome}</td>
+                  <td className="px-4 py-2">
+                    <form action={alterarNomeUsuario.bind(null, u.id)} className="flex items-center gap-2">
+                      <input
+                        name="nome"
+                        defaultValue={u.nome}
+                        required
+                        maxLength={80}
+                        className="w-full min-w-40 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900"
+                      />
+                      <button type="submit" className="text-xs text-slate-500 underline hover:text-slate-900">
+                        salvar
+                      </button>
+                    </form>
+                  </td>
                   <td className="px-4 py-2 text-slate-600">{u.email}</td>
                   <td className="px-4 py-2">
                     {u.id === atual.id ? (

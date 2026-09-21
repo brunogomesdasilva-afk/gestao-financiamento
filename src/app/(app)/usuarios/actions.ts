@@ -48,6 +48,20 @@ export async function criarUsuario(formData: FormData) {
   voltar({ ok: `Usuário ${nome} criado.` });
 }
 
+// O nome é o que aparece nos históricos, na carteira e no painel (no lugar do e-mail).
+export async function alterarNomeUsuario(usuarioId: string, formData: FormData) {
+  await exigirAdmin();
+  const nome = String(formData.get("nome") ?? "").trim().slice(0, 80);
+  if (!nome) voltar({ erro: "Informe o nome." });
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ nome }).eq("id", usuarioId);
+  if (error) voltar({ erro: error.message });
+
+  revalidatePath("/", "layout");
+  voltar({ ok: "Nome atualizado." });
+}
+
 export async function alterarPerfilUsuario(usuarioId: string, formData: FormData) {
   const atual = await exigirAdmin();
   const perfil = String(formData.get("perfil") ?? "");
