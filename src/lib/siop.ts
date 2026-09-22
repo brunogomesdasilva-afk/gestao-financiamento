@@ -64,7 +64,6 @@ const CAMPOS: {
   sistema: (c: ClienteParaConferir) => number | null;
   pdf: (v: ValoresSiop) => number | null;
 }[] = [
-  { chave: "valorCompra", rotulo: "Valor de compra e venda", sistema: (c) => c.valorCompra, pdf: (v) => v.valorCompra },
   { chave: "valorFinanciamento", rotulo: "Valor do financiamento", sistema: (c) => c.financiamento, pdf: (v) => v.valorFinanciamento },
   { chave: "fgts", rotulo: "FGTS utilizado", sistema: (c) => c.fgts, pdf: (v) => v.fgts },
   { chave: "terreno", rotulo: "Terreno (compra e venda)", sistema: (c) => c.terreno, pdf: (v) => v.terrenoCompraVenda },

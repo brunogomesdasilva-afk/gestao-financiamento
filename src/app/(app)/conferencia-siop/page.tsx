@@ -8,7 +8,7 @@ export default function ConferenciaSiopPage() {
           <h1 className="text-lg font-semibold text-slate-900">Conferência SIOP</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Compara os valores do item <strong>5 - Valores da operação</strong> do PDF do SIOP com o cadastro
-            de cada unidade no sistema: valor de compra e venda, valor do financiamento, FGTS e terreno.
+            de cada unidade no sistema: valor do financiamento, FGTS e terreno.
           </p>
         </div>
         <Link
