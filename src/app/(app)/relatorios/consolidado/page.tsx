@@ -122,7 +122,7 @@ export default async function ConsolidadoPage({
           </button>
         </form>
         <p className="mt-2 text-xs text-slate-400">
-          O e-mail leva o Excel em anexo, com os mesmos filtros escolhidos acima.
+          O e-mail leva o Excel e um PDF em anexo, com os mesmos filtros escolhidos acima.
         </p>
       </details>
 

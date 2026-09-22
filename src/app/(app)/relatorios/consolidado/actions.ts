@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { exigirAdmin } from "@/lib/auth";
 import { emailConfigurado, enviarEmail } from "@/lib/email";
 import { gerarExcelConsolidado } from "@/lib/relatorioExcel";
+import { gerarPdfConsolidado } from "@/lib/relatorioPdf";
 import { carregarConsolidado, filtrarConsolidado, filtrosParaParams, lerFiltros } from "@/lib/relatorios";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,14 +50,18 @@ export async function enviarConsolidadoPorEmail(formData: FormData) {
   if (linhas.length === 0) voltar({ erro: "Não há unidades para enviar com esses filtros." });
 
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  const arquivo = await gerarExcelConsolidado(linhas);
+  const nomeBase = `relatorio-consolidado-${hoje.replace(/\//g, "-")}`;
+  const [excel, pdf] = await Promise.all([gerarExcelConsolidado(linhas), gerarPdfConsolidado(linhas)]);
 
   try {
     await enviarEmail({
       para: destinatarios,
       assunto: `Relatório consolidado de financiamentos - ${hoje}`,
       texto: `Segue em anexo o relatório consolidado de financiamentos gerado em ${hoje}, com ${linhas.length} unidade(s).`,
-      anexos: [{ nome: `relatorio-consolidado-${hoje.replace(/\//g, "-")}.xlsx`, conteudo: arquivo }],
+      anexos: [
+        { nome: `${nomeBase}.xlsx`, conteudo: excel },
+        { nome: `${nomeBase}.pdf`, conteudo: pdf },
+      ],
     });
   } catch (e) {
     voltar({ erro: `Não foi possível enviar o e-mail: ${e instanceof Error ? e.message : "erro desconhecido"}` });

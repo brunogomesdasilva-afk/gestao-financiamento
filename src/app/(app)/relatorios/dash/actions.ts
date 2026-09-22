@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { exigirAdmin } from "@/lib/auth";
 import { emailConfigurado, enviarEmail } from "@/lib/email";
 import { gerarExcelDash } from "@/lib/relatorioExcel";
+import { gerarPdfDash } from "@/lib/relatorioPdf";
 import { carregarDash, MESES } from "@/lib/relatorios";
 import { createClient } from "@/lib/supabase/server";
 
@@ -55,14 +56,21 @@ export async function enviarDashPorEmail(formData: FormData) {
 
   const rotuloPeriodo = mes || ano ? `${mes ? MESES[Number(mes) - 1] : "Todos os meses"}-${ano ?? "Todos os anos"}` : "Situação atual";
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  const arquivo = await gerarExcelDash(empreendimentos, rotuloPeriodo);
+  const nomeBase = `dash-empreendimentos-${hoje.replace(/\//g, "-")}`;
+  const [excel, pdf] = await Promise.all([
+    gerarExcelDash(empreendimentos, rotuloPeriodo),
+    gerarPdfDash(empreendimentos, rotuloPeriodo),
+  ]);
 
   try {
     await enviarEmail({
       para: destinatarios,
       assunto: `Dash por empreendimento - ${hoje}`,
       texto: `Segue em anexo o dash por empreendimento gerado em ${hoje}, com ${empreendimentos.length} empreendimento(s).`,
-      anexos: [{ nome: `dash-empreendimentos-${hoje.replace(/\//g, "-")}.xlsx`, conteudo: arquivo }],
+      anexos: [
+        { nome: `${nomeBase}.xlsx`, conteudo: excel },
+        { nome: `${nomeBase}.pdf`, conteudo: pdf },
+      ],
     });
   } catch (e) {
     voltar({ erro: `Não foi possível enviar o e-mail: ${e instanceof Error ? e.message : "erro desconhecido"}` });
