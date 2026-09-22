@@ -195,6 +195,7 @@ export default async function CarteiraPage({
                     {podeAlterar ? (
                       <MenuAcoesUnidade
                         clienteId={l.cliente.id}
+                        empreendimentoId={l.empreendimentoId}
                         devolverAction={devolverUnidade.bind(null, l.cliente.id)}
                       />
                     ) : (

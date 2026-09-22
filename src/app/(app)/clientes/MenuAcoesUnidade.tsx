@@ -7,9 +7,11 @@ import { useEffect, useRef, useState } from "react";
 // pela rolagem da tabela.
 export function MenuAcoesUnidade({
   clienteId,
+  empreendimentoId,
   devolverAction,
 }: {
   clienteId: string;
+  empreendimentoId: string;
   devolverAction: () => Promise<void>;
 }) {
   const botao = useRef<HTMLButtonElement>(null);
@@ -71,7 +73,7 @@ export function MenuAcoesUnidade({
               role="menuitem"
               className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
-              Alterar cadastro da unidade
+              Alterar
             </Link>
             <Link
               href={`/clientes/${clienteId}#historico`}
@@ -80,6 +82,13 @@ export function MenuAcoesUnidade({
             >
               Histórico
             </Link>
+            <Link
+              href={`/conferencia-siop/resultado?empreendimento=${empreendimentoId}`}
+              role="menuitem"
+              className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Conferência SIOP
+            </Link>
             <form action={devolverAction}>
               <button
                 type="submit"
@@ -87,7 +96,7 @@ export function MenuAcoesUnidade({
                 onClick={(e) => {
                   if (
                     !window.confirm(
-                      "Devolver esta unidade à carteira sem analista? Ela sai da sua carteira e fica disponível para outro analista assumir."
+                      "Devolver esta unidade à carteira? Ela sai da sua carteira e fica disponível para outro analista assumir."
                     )
                   ) {
                     e.preventDefault();
@@ -95,7 +104,7 @@ export function MenuAcoesUnidade({
                 }}
                 className="block w-full px-4 py-2 text-left text-sm text-red-700 hover:bg-red-50"
               >
-                Devolver unidade à carteira sem analista
+                Devolver unidade à carteira
               </button>
             </form>
           </div>

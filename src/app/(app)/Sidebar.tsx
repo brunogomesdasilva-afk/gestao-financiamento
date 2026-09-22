@@ -181,17 +181,6 @@ const ITENS: ItemMenu[] = [
     ],
   },
   {
-    href: "/conferencia-siop",
-    rotulo: "Conferência SIOP",
-    ativo: (p: string) => p.startsWith("/conferencia-siop"),
-    icone: (
-      <Icone>
-        <polyline points="9 11 12 14 22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      </Icone>
-    ),
-  },
-  {
     href: "/usuarios",
     rotulo: "Usuários",
     somenteAdmin: true,
