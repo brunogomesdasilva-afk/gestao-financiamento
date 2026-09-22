@@ -159,8 +159,8 @@ export default async function CarteiraPage({
               <th className="px-2.5 py-1.5 font-medium">Status</th>
               <th className="px-2.5 py-1.5 font-medium">Assumida em</th>
               <th className="px-2.5 py-1.5 font-medium">Analista</th>
-              <th className="px-2.5 py-1.5 font-medium">Conferência SIOP</th>
-              <th className="w-10 px-1.5 py-1.5">
+              <th className="whitespace-nowrap px-2.5 py-1.5 font-medium">Conferência SIOP</th>
+              <th className="w-12 border-l border-slate-200 px-3 py-1.5">
                 <span className="sr-only">Ações</span>
               </th>
             </tr>
@@ -199,7 +199,7 @@ export default async function CarteiraPage({
                         })
                       : "—"}
                   </td>
-                  <td className="px-1.5 py-1.5 text-right">
+                  <td className="border-l border-slate-100 px-3 py-1.5 text-right">
                     {podeAlterar ? (
                       <MenuAcoesUnidade
                         clienteId={l.cliente.id}
