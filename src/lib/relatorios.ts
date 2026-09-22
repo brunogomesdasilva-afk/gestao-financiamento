@@ -307,6 +307,8 @@ export type UnidadeRepassada = {
   bloco: string;
   unidade: string;
   proprietario: string;
+  banco: string;
+  agencia: string;
   repassadoEm: string;
 };
 
@@ -389,6 +391,8 @@ export async function carregarMetaRepassados(
       bloco: torre?.nome ?? "—",
       unidade: unidade?.numero ?? "—",
       proprietario: c.nome ?? "Proprietário não informado",
+      banco: c.banco_financiador ?? "—",
+      agencia: c.agencia_financiamento ?? "—",
       repassadoEm: repassadoEmPorCliente.get(c.id) ?? c.updated_at,
     });
     emp.total++;

@@ -120,7 +120,7 @@ export default async function MetaPage({
                   <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
                     {a.unidades.map((u) => (
                       <li key={u.clienteId}>
-                        {u.bloco} · Unidade {u.unidade} — {u.proprietario} ·{" "}
+                        {u.bloco} · Unidade {u.unidade} — {u.proprietario} · {u.banco} · Ag. {u.agencia} ·{" "}
                         {new Date(u.repassadoEm).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </li>
                     ))}
