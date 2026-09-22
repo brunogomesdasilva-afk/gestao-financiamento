@@ -7,11 +7,9 @@ import { useEffect, useRef, useState } from "react";
 // pela rolagem da tabela.
 export function MenuAcoesUnidade({
   clienteId,
-  empreendimentoId,
   devolverAction,
 }: {
   clienteId: string;
-  empreendimentoId: string;
   devolverAction: () => Promise<void>;
 }) {
   const botao = useRef<HTMLButtonElement>(null);
@@ -83,7 +81,7 @@ export function MenuAcoesUnidade({
               Histórico
             </Link>
             <Link
-              href={`/conferencia-siop/resultado?empreendimento=${empreendimentoId}`}
+              href={`/clientes/${clienteId}/conferencia-siop`}
               role="menuitem"
               className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >

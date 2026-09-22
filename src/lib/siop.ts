@@ -87,6 +87,73 @@ function compararCampo(
   return { chave, rotulo, sistema, pdf, resultado };
 }
 
+// Lê o PDF (já em memória) e compara com o cadastro do cliente — usada tanto na conferência por
+// pasta (arquivo já lido do disco) quanto na conferência avulsa (arquivo escolhido na hora pelo
+// usuário, sem precisar estar na pasta SIOP).
+async function avaliarPdf(
+  cliente: ClienteParaConferir,
+  conteudo: Uint8Array,
+  parcial: ResultadoUnidade
+): Promise<ResultadoUnidade> {
+  let valores: ValoresSiop;
+  try {
+    valores = extrairValoresSiop(await lerTextoPdf(conteudo));
+  } catch {
+    return { ...parcial, situacao: "ilegivel", avisos: [...parcial.avisos, "Não foi possível ler o PDF."] };
+  }
+  if (!valores.encontrouSecao5) {
+    return {
+      ...parcial,
+      situacao: "ilegivel",
+      avisos: [...parcial.avisos, 'O item "5 - VALORES DA OPERAÇÃO" não foi encontrado no PDF.'],
+    };
+  }
+
+  const torreIdx = indiceTorre(cliente.torre) ?? "";
+  const campos = CAMPOS.map((c) => compararCampo(c.chave, c.rotulo, c.sistema(cliente), c.pdf(valores)));
+
+  let identificacao: ResultadoUnidade["identificacao"] = null;
+  if (valores.unidadeNoPdf) {
+    const torrePdf = valores.torreNoPdf ? indiceTorre(valores.torreNoPdf) : null;
+    const igual =
+      normalizarUnidade(valores.unidadeNoPdf) === normalizarUnidade(cliente.unidade) &&
+      (torrePdf == null || torrePdf === torreIdx);
+    identificacao = {
+      sistema: `Unidade ${cliente.unidade} · ${cliente.torre}`,
+      pdf: `Unidade ${valores.unidadeNoPdf}${valores.torreNoPdf ? ` · Torre ${valores.torreNoPdf}` : ""}`,
+      igual,
+    };
+  }
+
+  let situacao: SituacaoConferencia = "conferido";
+  if (campos.some((c) => c.resultado === "diferente") || identificacao?.igual === false) situacao = "divergente";
+  else if (campos.some((c) => c.resultado === "sem-sistema" || c.resultado === "sem-pdf")) situacao = "incompleto";
+
+  return { ...parcial, situacao, campos, identificacao, proponente: valores.proponente };
+}
+
+// Conferência avulsa: o usuário escolhe o PDF na hora, para uma única unidade, sem precisar que o
+// arquivo esteja na pasta SIOP.
+export async function conferirUnidadeComArquivo(
+  cliente: ClienteParaConferir,
+  conteudo: Uint8Array,
+  nomeArquivo: string
+): Promise<ResultadoUnidade> {
+  const parcial: ResultadoUnidade = {
+    clienteId: cliente.clienteId,
+    unidade: cliente.unidade,
+    torre: cliente.torre,
+    proprietario: cliente.proprietario,
+    arquivo: nomeArquivo,
+    situacao: "sem-pdf",
+    campos: [],
+    identificacao: null,
+    proponente: null,
+    avisos: [],
+  };
+  return avaliarPdf(cliente, conteudo, parcial);
+}
+
 export type ResultadoConferencia = {
   pasta: string;
   pastaDoEmpreendimento: string | null;
@@ -181,41 +248,13 @@ export async function conferirEmpreendimento(
       parcial.avisos.push(`Há ${encontrado.total} PDFs desta unidade na pasta; foi usado o mais recente.`);
     }
 
-    let valores: ValoresSiop;
+    let conteudo: Buffer;
     try {
-      const conteudo = await fs.readFile(path.join(/*turbopackIgnore: true*/ pastaEmp, encontrado.nome));
-      valores = extrairValoresSiop(await lerTextoPdf(new Uint8Array(conteudo)));
+      conteudo = await fs.readFile(path.join(/*turbopackIgnore: true*/ pastaEmp, encontrado.nome));
     } catch {
       return { ...parcial, situacao: "ilegivel", avisos: [...parcial.avisos, "Não foi possível ler o PDF."] };
     }
-    if (!valores.encontrouSecao5) {
-      return {
-        ...parcial,
-        situacao: "ilegivel",
-        avisos: [...parcial.avisos, 'O item "5 - VALORES DA OPERAÇÃO" não foi encontrado no PDF.'],
-      };
-    }
-
-    const campos = CAMPOS.map((c) => compararCampo(c.chave, c.rotulo, c.sistema(cliente), c.pdf(valores)));
-
-    let identificacao: ResultadoUnidade["identificacao"] = null;
-    if (valores.unidadeNoPdf) {
-      const torrePdf = valores.torreNoPdf ? indiceTorre(valores.torreNoPdf) : null;
-      const igual =
-        normalizarUnidade(valores.unidadeNoPdf) === normalizarUnidade(cliente.unidade) &&
-        (torrePdf == null || torrePdf === torreIdx);
-      identificacao = {
-        sistema: `Unidade ${cliente.unidade} · ${cliente.torre}`,
-        pdf: `Unidade ${valores.unidadeNoPdf}${valores.torreNoPdf ? ` · Torre ${valores.torreNoPdf}` : ""}`,
-        igual,
-      };
-    }
-
-    let situacao: SituacaoConferencia = "conferido";
-    if (campos.some((c) => c.resultado === "diferente") || identificacao?.igual === false) situacao = "divergente";
-    else if (campos.some((c) => c.resultado === "sem-sistema" || c.resultado === "sem-pdf")) situacao = "incompleto";
-
-    return { ...parcial, situacao, campos, identificacao, proponente: valores.proponente };
+    return avaliarPdf(cliente, new Uint8Array(conteudo), parcial);
   }
 
   // Lê poucos PDFs por vez para não sobrecarregar a máquina.
