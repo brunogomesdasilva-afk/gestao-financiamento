@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getPerfilAtual } from "@/lib/auth";
 import { formatarValorHistorico } from "@/lib/historico";
 import {
   CAMPO_LABEL,
@@ -58,6 +59,7 @@ export default async function ClienteDetalhePage({
   const { id } = await params;
   const { erro } = await searchParams;
   const supabase = await createClient();
+  const perfilAtual = await getPerfilAtual();
 
   const [
     { data: cliente },
@@ -78,6 +80,9 @@ export default async function ClienteDetalhePage({
   if (!cliente) notFound();
 
   const clienteTyped = cliente as Cliente;
+  const souAdmin = perfilAtual?.perfil === "admin";
+  const souDono = clienteTyped.analista_responsavel_id === perfilAtual?.id;
+  const podeAlterar = souAdmin || souDono;
 
   let empreendimento: Empreendimento | null = null;
   if (clienteTyped.empreendimento_id) {
@@ -160,21 +165,27 @@ export default async function ClienteDetalhePage({
     });
   }
 
-  // O que um mesmo analista fez no mesmo dia vira um bloco só, com um texto único.
-  // Os blocos ficam do mais recente para o mais antigo; dentro do bloco, na ordem em que aconteceu.
-  const grupos = new Map<string, GrupoHistorico>();
+  // Cada alteração salva de uma vez (um "commit": um clique em salvar) vira um bloco só, mesmo que
+  // tenha mudado vários campos. Dois eventos entram no mesmo bloco quando são do mesmo usuário e
+  // aconteceram a poucos segundos um do outro (a troca de campos e o registro do andamento, de uma
+  // mesma gravação, não caem exatamente no mesmo instante). Fora dessa janela, mesmo no mesmo dia e
+  // com o mesmo usuário, é um bloco novo.
+  const JANELA_MESMO_COMMIT_MS = 15_000;
+  const grupos: GrupoHistorico[] = [];
   for (const e of [...eventos].sort((x, y) => x.data.localeCompare(y.data))) {
-    const dia = new Date(e.data).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const chave = `${dia}|${e.usuarioId ?? "sistema"}`;
-    const grupo = grupos.get(chave);
-    if (grupo) {
-      grupo.itens.push(e);
-      grupo.ultimaData = e.data;
+    const ultimoGrupo = grupos[grupos.length - 1];
+    const mesmoUsuario = ultimoGrupo && ultimoGrupo.usuarioId === e.usuarioId;
+    const dentroDaJanela =
+      ultimoGrupo && new Date(e.data).getTime() - new Date(ultimoGrupo.ultimaData).getTime() <= JANELA_MESMO_COMMIT_MS;
+    if (ultimoGrupo && mesmoUsuario && dentroDaJanela) {
+      ultimoGrupo.itens.push(e);
+      ultimoGrupo.ultimaData = e.data;
     } else {
-      grupos.set(chave, { chave, dia, usuarioId: e.usuarioId, ultimaData: e.data, itens: [e] });
+      const dia = new Date(e.data).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      grupos.push({ chave: e.chave, dia, usuarioId: e.usuarioId, ultimaData: e.data, itens: [e] });
     }
   }
-  const gruposOrdenados = Array.from(grupos.values()).sort((a, b) => b.ultimaData.localeCompare(a.ultimaData));
+  const gruposOrdenados = [...grupos].sort((a, b) => b.ultimaData.localeCompare(a.ultimaData));
 
   const arquivarComId = arquivarCliente.bind(null, id, !clienteTyped.arquivado);
 
@@ -193,22 +204,26 @@ export default async function ClienteDetalhePage({
               </p>
             )}
           </div>
-          <div className="flex gap-2">
-            <Link
-              href={`/clientes/${id}/editar`}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Editar
-            </Link>
-            <form action={arquivarComId}>
-              <button
-                type="submit"
+          {podeAlterar ? (
+            <div className="flex gap-2">
+              <Link
+                href={`/clientes/${id}/editar`}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
               >
-                {clienteTyped.arquivado ? "Reativar" : "Concluir e liberar unidade"}
-              </button>
-            </form>
-          </div>
+                Editar
+              </Link>
+              <form action={arquivarComId}>
+                <button
+                  type="submit"
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {clienteTyped.arquivado ? "Reativar" : "Concluir e liberar unidade"}
+                </button>
+              </form>
+            </div>
+          ) : (
+            <span className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-slate-400">Somente consulta</span>
+          )}
         </div>
 
         {etapaAtual && (
@@ -286,11 +301,11 @@ export default async function ClienteDetalhePage({
           </div>
           <div>
             <dt className="text-slate-400">Seguro</dt>
-            <dd className="text-slate-900">{formatMoeda(clienteTyped.seguro)}</dd>
+            <dd className="text-slate-900">{clienteTyped.seguro ?? "—"}</dd>
           </div>
           <div>
             <dt className="text-slate-400">Escritura</dt>
-            <dd className="text-slate-900">{formatMoeda(clienteTyped.escritura)}</dd>
+            <dd className="text-slate-900">{clienteTyped.escritura ?? "—"}</dd>
           </div>
         </dl>
 

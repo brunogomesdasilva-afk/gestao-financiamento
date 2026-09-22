@@ -23,7 +23,11 @@ export type Etapa = {
   nome: string;
   ordem: number;
   cor: string;
+  restrita_admin: boolean;
 };
+
+export const SEGURO_OPCOES = ["CCA", "Agência"] as const;
+export const ESCRITURA_OPCOES = ["Grátis", "Parcelada", "Voucher-Parcelado", "Voucher - À Vista"] as const;
 
 export type Torre = {
   id: string;
@@ -77,8 +81,8 @@ export type Cliente = {
   valor_aprovado: number | null;
   diferenca_aprovacao_contratado: number | null;
   terreno: number | null;
-  seguro: number | null;
-  escritura: number | null;
+  seguro: string | null;
+  escritura: string | null;
   validade: string | null;
   corretor_responsavel_id: string | null;
   analista_responsavel_id: string | null;

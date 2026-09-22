@@ -4,9 +4,9 @@ import { login } from "./actions";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; ok?: string }>;
 }) {
-  const { erro } = await searchParams;
+  const { erro, ok } = await searchParams;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-grafite-escuro px-4 py-10">
@@ -30,6 +30,9 @@ export default async function LoginPage({
 
           {erro && (
             <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>
+          )}
+          {ok && (
+            <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{ok}</p>
           )}
 
           <form action={login} className="mt-6 space-y-4">
@@ -64,6 +67,13 @@ export default async function LoginPage({
               Entrar
             </button>
           </form>
+
+          <a
+            href="/login/esqueci-senha"
+            className="mt-4 block text-center text-sm text-slate-500 underline hover:text-slate-900"
+          >
+            Esqueci minha senha
+          </a>
         </div>
       </div>
     </div>

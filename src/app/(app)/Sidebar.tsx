@@ -53,6 +53,21 @@ const ITENS: ItemMenu[] = [
     ),
     filhos: [
       {
+        href: "/empreendimentos",
+        rotulo: "Ver empreendimento",
+        ativo: (p: string) =>
+          p === "/empreendimentos" ||
+          (p.startsWith("/empreendimentos/") &&
+            p !== "/empreendimentos/importar" &&
+            p !== "/empreendimentos/atualizar-espelho"),
+        icone: (
+          <Icone>
+            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+            <circle cx="12" cy="12" r="3" />
+          </Icone>
+        ),
+      },
+      {
         href: "/empreendimentos/importar",
         rotulo: "Cadastrar novo empreendimento",
         ativo: (p: string) => p === "/empreendimentos/importar",
@@ -80,7 +95,7 @@ const ITENS: ItemMenu[] = [
   },
   {
     href: "/clientes",
-    rotulo: "Assumir unidade",
+    rotulo: "Minhas unidades",
     ativo: (p: string) => p === "/clientes" || p === "/clientes/novo",
     icone: (
       <Icone>

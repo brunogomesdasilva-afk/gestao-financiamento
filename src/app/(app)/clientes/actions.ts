@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { exigirAdmin, getPerfilAtual } from "@/lib/auth";
 import { STATUS_VENDIDO } from "@/lib/database.types";
 import { parseValorBR } from "@/lib/valores";
 
@@ -29,8 +30,8 @@ function dadosDoFormulario(formData: FormData) {
     fgts_atualizacao: parseValor(formData.get("fgts_atualizacao")),
     valor_aprovado: parseValor(formData.get("valor_aprovado")),
     terreno: parseValor(formData.get("terreno")),
-    seguro: parseValor(formData.get("seguro")),
-    escritura: parseValor(formData.get("escritura")),
+    seguro: texto(formData, "seguro"),
+    escritura: texto(formData, "escritura"),
     validade: texto(formData, "validade"),
     observacoes: texto(formData, "observacoes"),
   };
@@ -49,21 +50,26 @@ async function empreendimentoIdDaUnidade(
   return torres?.empreendimento_id ?? null;
 }
 
-// O analista logado assume a análise de financiamento de uma unidade vendida. A exclusividade é
-// garantida pelo banco (índice único de acompanhamento ativo por unidade), então dois analistas
-// tentando ao mesmo tempo nunca ficam com a mesma unidade.
+// O administrador transfere (atribui) a análise de financiamento de uma unidade vendida a um
+// analista. A exclusividade é garantida pelo banco (índice único de acompanhamento ativo por
+// unidade), então duas atribuições ao mesmo tempo nunca ficam com a mesma unidade.
 export async function assumirUnidade(formData: FormData) {
+  await exigirAdmin();
   const supabase = await createClient();
   const unidadeId = texto(formData, "unidade_id");
+  const analistaId = texto(formData, "analista_id");
 
   if (!unidadeId) {
     redirect(`/clientes/novo?erro=${encodeURIComponent("Selecione o empreendimento, o bloco e a unidade.")}`);
   }
+  if (!analistaId) {
+    redirect(`/clientes/novo?unidade=${unidadeId}&erro=${encodeURIComponent("Escolha o analista responsável.")}`);
+  }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { data: analista } = await supabase.from("profiles").select("id, ativo").eq("id", analistaId).single();
+  if (!analista || analista.ativo === false) {
+    redirect(`/clientes/novo?unidade=${unidadeId}&erro=${encodeURIComponent("Escolha um analista ativo.")}`);
+  }
 
   const { data: unidade } = await supabase
     .from("unidades")
@@ -85,13 +91,18 @@ export async function assumirUnidade(formData: FormData) {
     etapaId = primeiraEtapa?.id ?? null;
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { data: cliente, error } = await supabase
     .from("clientes")
     .insert({
       ...dadosDoFormulario(formData),
       unidade_id: unidadeId,
       empreendimento_id: await empreendimentoIdDaUnidade(supabase, unidadeId),
-      analista_responsavel_id: user.id,
+      analista_responsavel_id: analistaId,
       etapa_atual_id: etapaId,
     })
     .select("id")
@@ -100,15 +111,15 @@ export async function assumirUnidade(formData: FormData) {
   if (error || !cliente) {
     const mensagem =
       error?.code === "23505"
-        ? "Essa unidade acabou de ser assumida por outro analista."
-        : (error?.message ?? "Erro ao assumir a unidade.");
-    redirect(`/clientes/novo?erro=${encodeURIComponent(mensagem)}`);
+        ? "Essa unidade acabou de ser atribuída a outro analista."
+        : (error?.message ?? "Erro ao transferir a unidade.");
+    redirect(`/clientes/novo?unidade=${unidadeId}&erro=${encodeURIComponent(mensagem)}`);
   }
 
   await supabase.from("andamento_historico").insert({
     cliente_id: cliente.id,
     etapa_id: etapaId,
-    observacao: "Unidade assumida pelo analista",
+    observacao: "Unidade transferida para o analista pelo administrador",
     usuario_id: user.id,
   });
 
@@ -120,6 +131,8 @@ export async function assumirUnidade(formData: FormData) {
 
 export async function atualizarCliente(clienteId: string, formData: FormData) {
   const supabase = await createClient();
+  const perfilAtual = await getPerfilAtual();
+  if (!perfilAtual) redirect("/login");
 
   // O status (etapa) pode ser alterado aqui; quando muda, a troca fica registrada no histórico da unidade.
   const novaEtapaId = texto(formData, "etapa_id");
@@ -129,6 +142,20 @@ export async function atualizarCliente(clienteId: string, formData: FormData) {
     .eq("id", clienteId)
     .single();
   const mudouEtapa = Boolean(novaEtapaId) && novaEtapaId !== atual?.etapa_atual_id;
+
+  // DISTRATO e REPASSADO só podem ser escolhidos (ou tirados) por um administrador.
+  if (mudouEtapa && perfilAtual.perfil !== "admin") {
+    const { data: etapasEnvolvidas } = await supabase
+      .from("etapas")
+      .select("id, restrita_admin")
+      .in("id", [novaEtapaId, atual?.etapa_atual_id].filter((v): v is string => Boolean(v)));
+    const restrita = (etapasEnvolvidas ?? []).some((e) => e.restrita_admin);
+    if (restrita) {
+      redirect(
+        `/clientes/${clienteId}/editar?erro=${encodeURIComponent("Somente o administrador pode alterar esse status.")}`
+      );
+    }
+  }
 
   const { error } = await supabase
     .from("clientes")

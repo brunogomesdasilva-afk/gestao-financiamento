@@ -17,7 +17,7 @@ const RELATORIOS = [
   {
     href: "/relatorios/meta",
     titulo: "Relatório de meta",
-    descricao: "Quantas unidades cada analista tem, por empreendimento e por status.",
+    descricao: "Quantas unidades cada analista repassou no mês, por empreendimento. Filtra por mês e ano.",
   },
 ];
 

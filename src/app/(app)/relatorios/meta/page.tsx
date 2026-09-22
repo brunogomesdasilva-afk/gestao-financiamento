@@ -1,114 +1,135 @@
-import Link from "next/link";
 import { exigirAdmin } from "@/lib/auth";
-import { carregarMeta, type Situacao } from "@/lib/relatorios";
+import { carregarMetaRepassados } from "@/lib/relatorios";
 import { createClient } from "@/lib/supabase/server";
 
-const ABA = "rounded-md px-3 py-1.5 text-sm font-medium";
+const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+const CAMPO = "mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm";
+
+function agoraSaoPaulo(): { ano: number; mes: number } {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  return {
+    ano: Number(partes.find((p) => p.type === "year")?.value),
+    mes: Number(partes.find((p) => p.type === "month")?.value),
+  };
+}
 
 export default async function MetaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ situacao?: string }>;
+  searchParams: Promise<{ mes?: string; ano?: string }>;
 }) {
   await exigirAdmin();
-  const { situacao: situacaoParam } = await searchParams;
-  const situacao: Situacao = situacaoParam === "todas" ? "todas" : "carteira";
+  const sp = await searchParams;
+  const padrao = agoraSaoPaulo();
+  const mes = Number(sp.mes) || padrao.mes;
+  const ano = Number(sp.ano) || padrao.ano;
 
   const supabase = await createClient();
-  const { empreendimentos, etapas } = await carregarMeta(supabase, situacao);
+  const { empreendimentos, totalGeral } = await carregarMetaRepassados(supabase, { ano, mes });
+
+  const totalPorAnalista = new Map<string, { nome: string; total: number }>();
+  for (const e of empreendimentos) {
+    for (const a of e.analistas) {
+      const atual = totalPorAnalista.get(a.id);
+      totalPorAnalista.set(a.id, { nome: a.nome, total: (atual?.total ?? 0) + a.unidades.length });
+    }
+  }
+  const ranking = Array.from(totalPorAnalista.values()).sort((x, y) => y.total - x.total);
 
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Relatório de meta</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Quantas unidades cada analista tem, por empreendimento e por status.
+        Unidades que viraram <strong>REPASSADO</strong> no mês escolhido, por analista — contando a
+        data em que cada unidade entrou nesse status.
       </p>
 
-      <div className="mt-4 inline-flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
-        <Link
-          href="/relatorios/meta"
-          className={`${ABA} ${situacao === "carteira" ? "bg-marca text-white" : "text-slate-600 hover:bg-slate-50"}`}
-        >
-          Em carteira
-        </Link>
-        <Link
-          href="/relatorios/meta?situacao=todas"
-          className={`${ABA} ${situacao === "todas" ? "bg-marca text-white" : "text-slate-600 hover:bg-slate-50"}`}
-        >
-          Todas (inclui encerradas)
-        </Link>
+      <form method="get" className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Mês</label>
+          <select name="mes" defaultValue={mes} className={CAMPO}>
+            {MESES.map((nome, i) => (
+              <option key={nome} value={i + 1}>
+                {nome}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Ano</label>
+          <input
+            name="ano"
+            type="number"
+            defaultValue={ano}
+            min={2020}
+            max={padrao.ano + 1}
+            className={`${CAMPO} w-24`}
+          />
+        </div>
+        <button type="submit" className="rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro">
+          Filtrar
+        </button>
+      </form>
+
+      <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <h2 className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-900">
+          Total por analista — {MESES[mes - 1]}/{ano}
+        </h2>
+        {ranking.length > 0 ? (
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-slate-100">
+              {ranking.map((a) => (
+                <tr key={a.nome}>
+                  <td className="px-4 py-2 font-medium text-slate-900">{a.nome}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-900">{a.total}</td>
+                </tr>
+              ))}
+              <tr className="bg-slate-50 font-semibold text-slate-900">
+                <td className="px-4 py-2">Total geral</td>
+                <td className="px-4 py-2 text-right tabular-nums">{totalGeral}</td>
+              </tr>
+            </tbody>
+          </table>
+        ) : (
+          <p className="px-4 py-6 text-center text-sm text-slate-400">
+            Nenhuma unidade repassada em {MESES[mes - 1]}/{ano}.
+          </p>
+        )}
       </div>
 
       <div className="mt-6 space-y-6">
-        {empreendimentos.map((e) => {
-          const totaisPorEtapa = new Map<string, number>();
-          let totalGeral = 0;
-          for (const a of e.analistas) {
-            totalGeral += a.total;
-            for (const [etapaId, qtd] of a.porEtapa) {
-              totaisPorEtapa.set(etapaId, (totaisPorEtapa.get(etapaId) ?? 0) + qtd);
-            }
-          }
-
-          return (
-            <section key={e.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <h2 className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-900">
-                {e.nome}
-              </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase text-slate-500">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">Analista</th>
-                      {etapas.map((et) => (
-                        <th key={et.id} className="px-3 py-2 text-right font-medium">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: et.cor }} />
-                            {et.nome}
-                          </span>
-                        </th>
-                      ))}
-                      <th className="px-4 py-2 text-right font-medium">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {e.analistas.map((a) => (
-                      <tr key={a.id}>
-                        <td className="px-4 py-2 font-medium text-slate-900">{a.nome}</td>
-                        {etapas.map((et) => {
-                          const qtd = a.porEtapa.get(et.id) ?? 0;
-                          return (
-                            <td
-                              key={et.id}
-                              className={`px-3 py-2 text-right tabular-nums ${qtd > 0 ? "text-slate-900" : "text-slate-300"}`}
-                            >
-                              {qtd}
-                            </td>
-                          );
-                        })}
-                        <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-900">{a.total}</td>
-                      </tr>
+        {empreendimentos.map((e) => (
+          <section key={e.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
+              <h2 className="text-sm font-semibold text-slate-900">{e.nome}</h2>
+              <span className="text-xs text-slate-500">{e.total} unidade(s)</span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {e.analistas.map((a) => (
+                <div key={a.id} className="px-4 py-3">
+                  <p className="text-sm font-medium text-slate-900">
+                    {a.nome} <span className="font-normal text-slate-500">({a.unidades.length})</span>
+                  </p>
+                  <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
+                    {a.unidades.map((u) => (
+                      <li key={u.clienteId}>
+                        {u.bloco} · Unidade {u.unidade} — {u.proprietario} ·{" "}
+                        {new Date(u.repassadoEm).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                      </li>
                     ))}
-                    <tr className="bg-slate-50 font-semibold text-slate-900">
-                      <td className="px-4 py-2">Total</td>
-                      {etapas.map((et) => (
-                        <td key={et.id} className="px-3 py-2 text-right tabular-nums">
-                          {totaisPorEtapa.get(et.id) ?? 0}
-                        </td>
-                      ))}
-                      <td className="px-4 py-2 text-right tabular-nums">{totalGeral}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          );
-        })}
-        {empreendimentos.length === 0 && (
-          <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-400">
-            Nenhum analista com unidades assumidas ainda.
-          </p>
-        )}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

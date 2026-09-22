@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Banco } from "@/lib/bancos";
-import type { Cliente, ModalidadeFinanciamento } from "@/lib/database.types";
+import { ESCRITURA_OPCOES, SEGURO_OPCOES, type Cliente, type ModalidadeFinanciamento } from "@/lib/database.types";
 
 const CAMPO = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
 const MOEDA = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -143,8 +143,28 @@ export function CamposFinanciamento({
       <CampoMoeda nome="fgts_contratado" rotulo="FGTS contratado" valorInicial={cliente?.fgts_contratado} />
       <CampoMoeda nome="fgts_atualizacao" rotulo="FGTS atualização" valorInicial={cliente?.fgts_atualizacao} />
       <CampoMoeda nome="terreno" rotulo="Terreno" valorInicial={cliente?.terreno} />
-      <CampoMoeda nome="seguro" rotulo="Seguro" valorInicial={cliente?.seguro} />
-      <CampoMoeda nome="escritura" rotulo="Escritura" valorInicial={cliente?.escritura} />
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Seguro</label>
+        <select name="seguro" defaultValue={cliente?.seguro ?? ""} className={CAMPO}>
+          <option value="">Selecione</option>
+          {SEGURO_OPCOES.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700">Escritura</label>
+        <select name="escritura" defaultValue={cliente?.escritura ?? ""} className={CAMPO}>
+          <option value="">Selecione</option>
+          {ESCRITURA_OPCOES.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

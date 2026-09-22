@@ -157,8 +157,8 @@ export default async function ConsolidadoPage({
                 <td className="px-3 py-2 text-right text-slate-600">{moeda(l.fgtsContratado)}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{moeda(l.fgtsAtualizacao)}</td>
                 <td className="px-3 py-2 text-right text-slate-600">{moeda(l.terreno)}</td>
-                <td className="px-3 py-2 text-right text-slate-600">{moeda(l.seguro)}</td>
-                <td className="px-3 py-2 text-right text-slate-600">{moeda(l.escritura)}</td>
+                <td className="px-3 py-2 text-slate-600">{l.seguro || "—"}</td>
+                <td className="px-3 py-2 text-slate-600">{l.escritura || "—"}</td>
                 <td className="px-3 py-2 text-slate-600">{dataCurta(l.atualizadoEm)}</td>
               </tr>
             ))}

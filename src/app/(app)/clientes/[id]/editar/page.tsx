@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Cliente,
@@ -10,6 +10,7 @@ import type {
   Unidade,
 } from "@/lib/database.types";
 import { getBancos } from "@/lib/bancos";
+import { getPerfilAtual } from "@/lib/auth";
 import { atualizarCliente } from "../../actions";
 import { CamposFinanciamento } from "../../CamposFinanciamento";
 
@@ -26,18 +27,29 @@ export default async function EditarClientePage({
   const { erro } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: cliente }, { data: usuarios }, { data: modalidades }, { data: etapas }, bancos] =
+  const [{ data: cliente }, { data: usuarios }, { data: modalidades }, { data: etapas }, bancos, perfilAtual] =
     await Promise.all([
       supabase.from("clientes").select("*").eq("id", id).single(),
       supabase.from("profiles").select("*").order("nome"),
       supabase.from("modalidades_financiamento").select("*").order("ordem"),
       supabase.from("etapas").select("*").order("ordem", { ascending: true }),
       getBancos(),
+      getPerfilAtual(),
     ]);
 
   if (!cliente) notFound();
   const clienteTyped = cliente as Cliente;
-  const etapasTyped = (etapas ?? []) as Etapa[];
+  const souAdmin = perfilAtual?.perfil === "admin";
+  // Só o dono da unidade ou o administrador editam; os demais só podem consultar.
+  if (!souAdmin && clienteTyped.analista_responsavel_id !== perfilAtual?.id) {
+    redirect(`/clientes/${id}`);
+  }
+  const todasEtapas = (etapas ?? []) as Etapa[];
+  // Sem ser administrador, só aparecem as etapas livres, mais a etapa atual (mesmo se for restrita,
+  // para não sumir da tela) — assim dá para ver o status sem poder trocar para DISTRATO/REPASSADO.
+  const etapasTyped = souAdmin
+    ? todasEtapas
+    : todasEtapas.filter((e) => !e.restrita_admin || e.id === clienteTyped.etapa_atual_id);
   const usuariosTyped = (usuarios as Profile[] | null) ?? [];
   const modalidadesTyped = (modalidades as ModalidadeFinanciamento[] | null) ?? [];
 

@@ -2,6 +2,24 @@ import { exigirAdmin } from "@/lib/auth";
 import { carregarDash, type ContagemStatus } from "@/lib/relatorios";
 import { createClient } from "@/lib/supabase/server";
 
+const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+const CAMPO = "mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm";
+
+function agoraSaoPaulo(): { ano: number; mes: number } {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  return {
+    ano: Number(partes.find((p) => p.type === "year")?.value),
+    mes: Number(partes.find((p) => p.type === "month")?.value),
+  };
+}
+
 function Barras({ itens, total }: { itens: ContagemStatus[]; total: number }) {
   return (
     <ul className="space-y-3">
@@ -28,10 +46,20 @@ function Barras({ itens, total }: { itens: ContagemStatus[]; total: number }) {
   );
 }
 
-export default async function DashPage() {
+export default async function DashPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string; ano?: string }>;
+}) {
   await exigirAdmin();
+  const sp = await searchParams;
+  const padrao = agoraSaoPaulo();
+  const filtrando = Boolean(sp.mes || sp.ano);
+  const mes = Number(sp.mes) || padrao.mes;
+  const ano = Number(sp.ano) || padrao.ano;
+
   const supabase = await createClient();
-  const empreendimentos = await carregarDash(supabase);
+  const empreendimentos = await carregarDash(supabase, filtrando ? { ano, mes } : undefined);
 
   return (
     <div>
@@ -39,6 +67,45 @@ export default async function DashPage() {
       <p className="mt-1 text-sm text-slate-500">
         Fechamento de cada empreendimento: quantas unidades estão em cada status.
       </p>
+
+      <form method="get" className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Mês</label>
+          <select name="mes" defaultValue={filtrando ? mes : ""} className={CAMPO}>
+            <option value="">Todos os períodos</option>
+            {MESES.map((nome, i) => (
+              <option key={nome} value={i + 1}>
+                {nome}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500">Ano</label>
+          <input
+            name="ano"
+            type="number"
+            defaultValue={filtrando ? ano : padrao.ano}
+            min={2020}
+            max={padrao.ano + 1}
+            className={`${CAMPO} w-24`}
+          />
+        </div>
+        <button type="submit" className="rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro">
+          Filtrar
+        </button>
+        {filtrando && (
+          <a href="/relatorios/dash" className="pb-2 text-sm text-slate-500 underline hover:text-slate-900">
+            Ver todos os períodos
+          </a>
+        )}
+      </form>
+      {filtrando && (
+        <p className="mt-2 text-xs text-slate-400">
+          A análise de financiamento mostra só quem entrou em cada status em {MESES[mes - 1]}/{ano}. O
+          espelho de vendas (cores) é sempre a situação atual, não filtra por período.
+        </p>
+      )}
 
       <div className="mt-6 space-y-6">
         {empreendimentos.map((e) => (

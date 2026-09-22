@@ -42,12 +42,19 @@ export function FiltrosCarteira({
   caminho = "/clientes",
   analistas,
   mostrarSituacao = false,
+  valorAnalistaTodos = "",
+  rotuloAnalistaTodos = "Todos",
 }: {
   linhas: LinhaFiltro[];
   selecao: SelecaoFiltros;
   caminho?: string;
   analistas?: { id: string; nome: string }[];
   mostrarSituacao?: boolean;
+  // Em telas onde o filtro de analista tem um padrão diferente de "todos" (ex.: "Minhas unidades",
+  // que parte filtrada no usuário logado), usar um valor próprio para a opção "Todos" faz a escolha
+  // ir para a URL mesmo assim, em vez de ficar indistinguível de "nenhum filtro ainda escolhido".
+  valorAnalistaTodos?: string;
+  rotuloAnalistaTodos?: string;
 }) {
   const router = useRouter();
 
@@ -139,11 +146,11 @@ export function FiltrosCarteira({
         <div>
           <label className="block text-xs font-medium text-slate-700">Analista</label>
           <select
-            value={selecao.analista ?? ""}
+            value={selecao.analista ?? valorAnalistaTodos}
             onChange={(e) => aplicar({ ...selecao, analista: e.target.value })}
             className={SELECT}
           >
-            <option value="">Todos</option>
+            <option value={valorAnalistaTodos}>{rotuloAnalistaTodos}</option>
             {analistas.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.nome}

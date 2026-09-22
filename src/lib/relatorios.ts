@@ -1,6 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { buscarTodos } from "@/lib/paginacao";
 import type {
+  AndamentoHistorico,
   Cliente,
   Empreendimento,
   Etapa,
@@ -11,6 +12,20 @@ import type {
 } from "@/lib/database.types";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+// Ano e mês (1-12) de uma data no fuso de São Paulo, para filtros "neste mês" consistentes com o
+// resto do sistema (que sempre mostra datas nesse fuso).
+export function anoMesSaoPaulo(dataIso: string): { ano: number; mes: number } {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(dataIso));
+  return {
+    ano: Number(partes.find((p) => p.type === "year")?.value),
+    mes: Number(partes.find((p) => p.type === "month")?.value),
+  };
+}
 
 export type Situacao = "carteira" | "todas";
 
@@ -73,8 +88,8 @@ export type LinhaConsolidado = {
   fgtsContratado: number | null;
   fgtsAtualizacao: number | null;
   terreno: number | null;
-  seguro: number | null;
-  escritura: number | null;
+  seguro: string | null;
+  escritura: string | null;
   situacao: "Em carteira" | "Encerrada";
   assumidaEm: string;
   atualizadoEm: string;
@@ -190,15 +205,17 @@ export type DashEmpreendimento = {
   analisePorEtapa: ContagemStatus[]; // status da esteira de análise de financiamento
 };
 
-export async function carregarDash(supabase: Supabase): Promise<DashEmpreendimento[]> {
-  const [{ data: empreendimentos }, { data: torres }, unidades, clientes, { data: etapas }, { data: statusUnidade }] =
+export type PeriodoRelatorio = { ano: number; mes: number };
+
+export async function carregarDash(supabase: Supabase, periodo?: PeriodoRelatorio): Promise<DashEmpreendimento[]> {
+  const [{ data: empreendimentos }, { data: torres }, unidades, clientes, { data: etapas }, { data: statusUnidade }, andamento] =
     await Promise.all([
       supabase.from("empreendimentos").select("*").order("nome"),
       supabase.from("torres").select("id, empreendimento_id"),
       buscarTodos<Pick<Unidade, "status" | "torre_id">>((de, ate) =>
         supabase.from("unidades").select("id, status, torre_id").order("id").range(de, ate)
       ),
-      buscarTodos<Pick<Cliente, "empreendimento_id" | "etapa_atual_id">>((de, ate) =>
+      buscarTodos<Pick<Cliente, "id" | "empreendimento_id" | "etapa_atual_id">>((de, ate) =>
         supabase
           .from("clientes")
           .select("id, empreendimento_id, etapa_atual_id")
@@ -208,6 +225,12 @@ export async function carregarDash(supabase: Supabase): Promise<DashEmpreendimen
       ),
       supabase.from("etapas").select("*").order("ordem", { ascending: true }),
       supabase.from("status_unidade").select("*").order("ordem"),
+      // Só busca o andamento completo quando há filtro de período (senão a contagem é sempre a atual).
+      periodo
+        ? buscarTodos<Pick<AndamentoHistorico, "cliente_id" | "etapa_id" | "created_at">>((de, ate) =>
+            supabase.from("andamento_historico").select("cliente_id, etapa_id, created_at").order("id").range(de, ate)
+          )
+        : Promise.resolve([] as Pick<AndamentoHistorico, "cliente_id" | "etapa_id" | "created_at">[]),
     ]);
 
   const empreendimentoDaTorre = new Map(
@@ -215,6 +238,19 @@ export async function carregarDash(supabase: Supabase): Promise<DashEmpreendimen
   );
   const etapasLista = (etapas ?? []) as Etapa[];
   const statusLista = (statusUnidade ?? []) as StatusUnidadeConfig[];
+
+  // Data em que cada cliente entrou na etapa que é hoje a etapa atual dele (a transição mais recente
+  // para essa etapa específica). Usada só quando um período foi escolhido.
+  let entradaNaEtapaAtual: Map<string, string> | null = null;
+  if (periodo) {
+    const etapaAtualPorCliente = new Map(clientes.map((c) => [c.id, c.etapa_atual_id]));
+    entradaNaEtapaAtual = new Map();
+    for (const a of andamento) {
+      if (!a.etapa_id || a.etapa_id !== etapaAtualPorCliente.get(a.cliente_id)) continue;
+      const atual = entradaNaEtapaAtual.get(a.cliente_id);
+      if (!atual || a.created_at > atual) entradaNaEtapaAtual.set(a.cliente_id, a.created_at);
+    }
+  }
 
   return ((empreendimentos ?? []) as Empreendimento[]).map((e) => {
     const porStatus = new Map<string, number>();
@@ -229,6 +265,12 @@ export async function carregarDash(supabase: Supabase): Promise<DashEmpreendimen
     let emAnalise = 0;
     for (const c of clientes) {
       if (c.empreendimento_id !== e.id) continue;
+      if (periodo) {
+        const dataEntrada = entradaNaEtapaAtual?.get(c.id);
+        if (!dataEntrada) continue;
+        const { ano, mes } = anoMesSaoPaulo(dataEntrada);
+        if (ano !== periodo.ano || mes !== periodo.mes) continue;
+      }
       emAnalise++;
       if (c.etapa_atual_id) porEtapa.set(c.etapa_atual_id, (porEtapa.get(c.etapa_atual_id) ?? 0) + 1);
     }
@@ -247,56 +289,106 @@ export async function carregarDash(supabase: Supabase): Promise<DashEmpreendimen
 }
 
 // ---------- Relatório de meta ----------
+// A meta é o número de unidades que cada analista repassou (status REPASSADO) dentro do mês
+// escolhido — contando a data em que a unidade entrou nesse status, não a data de hoje.
 
-export type MetaAnalista = { id: string; nome: string; porEtapa: Map<string, number>; total: number };
-export type MetaEmpreendimento = { id: string; nome: string; analistas: MetaAnalista[] };
+export type UnidadeRepassada = {
+  clienteId: string;
+  empreendimento: string;
+  bloco: string;
+  unidade: string;
+  proprietario: string;
+  repassadoEm: string;
+};
 
-export async function carregarMeta(
+export type MetaAnalista = { id: string; nome: string; unidades: UnidadeRepassada[] };
+export type MetaEmpreendimento = { id: string; nome: string; analistas: MetaAnalista[]; total: number };
+
+export async function carregarMetaRepassados(
   supabase: Supabase,
-  situacao: Situacao
-): Promise<{ empreendimentos: MetaEmpreendimento[]; etapas: Etapa[] }> {
-  const [{ data: empreendimentos }, { data: etapas }, { data: perfis }, clientes] = await Promise.all([
-    supabase.from("empreendimentos").select("*").order("nome"),
-    supabase.from("etapas").select("*").order("ordem", { ascending: true }),
+  periodo: PeriodoRelatorio
+): Promise<{ empreendimentos: MetaEmpreendimento[]; totalGeral: number }> {
+  const { data: etapaRepassado } = await supabase.from("etapas").select("id").eq("nome", "REPASSADO").maybeSingle();
+  if (!etapaRepassado) return { empreendimentos: [], totalGeral: 0 };
+
+  const [clientes, { data: perfis }, andamento] = await Promise.all([
+    buscarTodos<Cliente>((de, ate) =>
+      supabase.from("clientes").select("*").eq("etapa_atual_id", etapaRepassado.id).order("id").range(de, ate)
+    ),
     supabase.from("profiles").select("id, nome"),
-    buscarTodos<Pick<Cliente, "empreendimento_id" | "analista_responsavel_id" | "etapa_atual_id">>((de, ate) => {
-      let consulta = supabase
-        .from("clientes")
-        .select("id, empreendimento_id, analista_responsavel_id, etapa_atual_id")
+    buscarTodos<Pick<AndamentoHistorico, "cliente_id" | "created_at">>((de, ate) =>
+      supabase
+        .from("andamento_historico")
+        .select("cliente_id, created_at")
+        .eq("etapa_id", etapaRepassado.id)
         .order("id")
-        .range(de, ate);
-      if (situacao === "carteira") consulta = consulta.eq("arquivado", false);
-      return consulta;
-    }),
+        .range(de, ate)
+    ),
   ]);
 
+  // A transição mais recente para REPASSADO de cada cliente (se ele voltou a ficar REPASSADO depois
+  // de sair e retornar, vale a última vez).
+  const repassadoEmPorCliente = new Map<string, string>();
+  for (const a of andamento) {
+    const atual = repassadoEmPorCliente.get(a.cliente_id);
+    if (!atual || a.created_at > atual) repassadoEmPorCliente.set(a.cliente_id, a.created_at);
+  }
+
+  const clientesNoPeriodo = clientes.filter((c) => {
+    const data = repassadoEmPorCliente.get(c.id);
+    if (!data) return false;
+    const { ano, mes } = anoMesSaoPaulo(data);
+    return ano === periodo.ano && mes === periodo.mes;
+  });
+
+  const unidadeIds = clientesNoPeriodo.map((c) => c.unidade_id).filter((id): id is string => Boolean(id));
+  const { data: unidadesData } = unidadeIds.length
+    ? await supabase.from("unidades").select("id, numero, torre_id").in("id", unidadeIds)
+    : { data: [] };
+  const unidades = (unidadesData ?? []) as Pick<Unidade, "id" | "numero" | "torre_id">[];
+  const torreIds = Array.from(new Set(unidades.map((u) => u.torre_id)));
+  const [{ data: torresData }, { data: empreendimentosData }] = await Promise.all([
+    torreIds.length ? supabase.from("torres").select("*").in("id", torreIds) : Promise.resolve({ data: [] }),
+    supabase.from("empreendimentos").select("*"),
+  ]);
+
+  const unidadePorId = new Map(unidades.map((u) => [u.id, u]));
+  const torrePorId = new Map(((torresData ?? []) as Torre[]).map((t) => [t.id, t]));
+  const empPorId = new Map(((empreendimentosData ?? []) as Empreendimento[]).map((e) => [e.id, e]));
   const nomeAnalista = new Map(((perfis ?? []) as { id: string; nome: string }[]).map((p) => [p.id, p.nome]));
 
-  const resultado = ((empreendimentos ?? []) as Empreendimento[])
-    .map((e) => {
-      const porAnalista = new Map<string, MetaAnalista>();
-      for (const c of clientes) {
-        if (c.empreendimento_id !== e.id || !c.analista_responsavel_id) continue;
-        let a = porAnalista.get(c.analista_responsavel_id);
-        if (!a) {
-          a = {
-            id: c.analista_responsavel_id,
-            nome: nomeAnalista.get(c.analista_responsavel_id) ?? "—",
-            porEtapa: new Map(),
-            total: 0,
-          };
-          porAnalista.set(a.id, a);
-        }
-        a.total++;
-        if (c.etapa_atual_id) a.porEtapa.set(c.etapa_atual_id, (a.porEtapa.get(c.etapa_atual_id) ?? 0) + 1);
-      }
-      return {
-        id: e.id,
-        nome: e.nome,
-        analistas: Array.from(porAnalista.values()).sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR")),
-      };
-    })
-    .filter((e) => e.analistas.length > 0);
+  const porEmpreendimento = new Map<string, MetaEmpreendimento>();
+  let totalGeral = 0;
+  for (const c of clientesNoPeriodo) {
+    if (!c.empreendimento_id || !c.analista_responsavel_id) continue;
+    const unidade = c.unidade_id ? unidadePorId.get(c.unidade_id) : undefined;
+    const torre = unidade ? torrePorId.get(unidade.torre_id) : undefined;
 
-  return { empreendimentos: resultado, etapas: (etapas ?? []) as Etapa[] };
+    let emp = porEmpreendimento.get(c.empreendimento_id);
+    if (!emp) {
+      emp = { id: c.empreendimento_id, nome: empPorId.get(c.empreendimento_id)?.nome ?? "—", analistas: [], total: 0 };
+      porEmpreendimento.set(c.empreendimento_id, emp);
+    }
+    let analista = emp.analistas.find((a) => a.id === c.analista_responsavel_id);
+    if (!analista) {
+      analista = { id: c.analista_responsavel_id, nome: nomeAnalista.get(c.analista_responsavel_id) ?? "—", unidades: [] };
+      emp.analistas.push(analista);
+    }
+    analista.unidades.push({
+      clienteId: c.id,
+      empreendimento: emp.nome,
+      bloco: torre?.nome ?? "—",
+      unidade: unidade?.numero ?? "—",
+      proprietario: c.nome ?? "Proprietário não informado",
+      repassadoEm: repassadoEmPorCliente.get(c.id) ?? c.updated_at,
+    });
+    emp.total++;
+    totalGeral++;
+  }
+
+  const empreendimentos = Array.from(porEmpreendimento.values())
+    .map((e) => ({ ...e, analistas: e.analistas.sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR")) }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  return { empreendimentos, totalGeral };
 }

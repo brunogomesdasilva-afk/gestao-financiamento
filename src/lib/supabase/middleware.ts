@@ -27,7 +27,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublicRoute = request.nextUrl.pathname.startsWith("/login");
+  // /auth/confirm troca o link do e-mail (redefinir senha etc.) por uma sessão; roda sem estar logado.
+  const isPublicRoute =
+    request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/auth/");
 
   // Usuário inativo: encerra a sessão e volta para o login com um aviso.
   if (user) {
@@ -50,7 +52,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublicRoute) {
+  // /login/redefinir-senha é a exceção: quem clicou no link de recuperação chega autenticado
+  // (sessão de recuperação) e precisa ver essa tela antes de ser levado para dentro do sistema.
+  if (user && isPublicRoute && request.nextUrl.pathname !== "/login/redefinir-senha") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

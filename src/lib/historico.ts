@@ -5,8 +5,6 @@ const CAMPOS_MOEDA = new Set([
   "fgts_atualizacao",
   "valor_aprovado",
   "terreno",
-  "seguro",
-  "escritura",
 ]);
 
 export type ContextoHistorico = {

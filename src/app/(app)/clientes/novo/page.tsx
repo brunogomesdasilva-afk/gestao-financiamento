@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import type { Etapa, ModalidadeFinanciamento } from "@/lib/database.types";
+import { exigirAdmin } from "@/lib/auth";
+import type { Etapa, ModalidadeFinanciamento, Profile } from "@/lib/database.types";
 import { getBancos } from "@/lib/bancos";
 import { getUnidadesParaAssumir } from "@/lib/unidades";
 import { assumirUnidade } from "../actions";
@@ -14,6 +15,7 @@ export default async function AssumirUnidadePage({
 }: {
   searchParams: Promise<{ erro?: string; unidade?: string; empreendimento?: string; torre?: string; q?: string }>;
 }) {
+  await exigirAdmin();
   const { erro, unidade: unidadeEscolhidaId, empreendimento: empFiltro, torre: torreFiltro, q } = await searchParams;
   const { empreendimentos, torres, unidades } = await getUnidadesParaAssumir();
 
@@ -39,9 +41,9 @@ export default async function AssumirUnidadePage({
   return (
     <div className="mx-auto max-w-3xl">
       <Link href={escolhida ? "/clientes/novo" : "/clientes"} className="text-xs text-slate-500 hover:text-slate-900">
-        {escolhida ? "← Unidades disponíveis" : "← Minha carteira"}
+        {escolhida ? "← Unidades disponíveis" : "← Minhas unidades"}
       </Link>
-      <h1 className="mt-1 text-lg font-semibold text-slate-900">Assumir unidade</h1>
+      <h1 className="mt-1 text-lg font-semibold text-slate-900">Transferir unidade</h1>
 
       {erroExibido && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erroExibido}</p>}
 
@@ -103,9 +105,8 @@ function ListaDisponiveis({
   return (
     <>
       <p className="mt-1 text-sm text-slate-500">
-        Estas são as unidades <strong>vendidas</strong> que ainda não têm analista. Clique na unidade que
-        você vai analisar para preencher o proprietário e os dados do financiamento. Ao assumir, a unidade
-        fica com você até ser concluída e nenhum outro analista consegue pegá-la.
+        Estas são as unidades <strong>vendidas</strong> que ainda não têm analista. Clique na unidade para
+        escolher o analista responsável e preencher o proprietário e os dados do financiamento.
       </p>
 
       <form method="get" className="mt-5 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -185,7 +186,7 @@ function ListaDisponiveis({
                       href={`/clientes/novo?unidade=${u.id}`}
                       className="rounded-md bg-marca px-3 py-1 text-xs font-medium text-white hover:bg-marca-escuro"
                     >
-                      Assumir
+                      Transferir
                     </Link>
                   </td>
                 </tr>
@@ -205,25 +206,21 @@ function ListaDisponiveis({
 
 async function FormularioAssumir({ unidade }: { unidade: UnidadeDescrita }) {
   const supabase = await createClient();
-  const [{ data: modalidades }, { data: etapas }, { data: auth }, bancos] = await Promise.all([
+  const [{ data: modalidades }, { data: etapas }, { data: usuarios }, bancos] = await Promise.all([
     supabase.from("modalidades_financiamento").select("*").order("ordem"),
     supabase.from("etapas").select("*").order("ordem", { ascending: true }),
-    supabase.auth.getUser(),
+    supabase.from("profiles").select("*").order("nome"),
     getBancos(),
   ]);
 
-  let nomeAnalista = auth.user?.email ?? "";
-  if (auth.user) {
-    const { data: perfil } = await supabase.from("profiles").select("nome").eq("id", auth.user.id).single();
-    if (perfil?.nome) nomeAnalista = perfil.nome;
-  }
-
   const etapasTyped = (etapas ?? []) as Etapa[];
+  const analistasAtivos = ((usuarios ?? []) as Profile[]).filter((u) => u.ativo !== false);
 
   return (
     <>
       <p className="mt-1 text-sm text-slate-500">
-        Preencha os dados abaixo. Todos são opcionais e podem ser completados depois.
+        Preencha os dados abaixo. Só o analista responsável é obrigatório; os demais campos podem ser
+        completados depois.
       </p>
 
       <form action={assumirUnidade} className="mt-6 space-y-6 rounded-xl border border-slate-200 bg-white p-6">
@@ -266,11 +263,16 @@ async function FormularioAssumir({ unidade }: { unidade: UnidadeDescrita }) {
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium text-slate-700">Analista responsável</label>
-              <input
-                disabled
-                value={nomeAnalista}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500"
-              />
+              <select name="analista_id" required defaultValue="" className={CAMPO}>
+                <option value="" disabled>
+                  Selecione o analista
+                </option>
+                {analistasAtivos.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.nome}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </section>
@@ -287,7 +289,7 @@ async function FormularioAssumir({ unidade }: { unidade: UnidadeDescrita }) {
             type="submit"
             className="flex-1 rounded-md bg-marca px-3 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
           >
-            Assumir análise
+            Transferir unidade
           </button>
           <Link href="/clientes/novo" className="text-sm text-slate-600 underline hover:text-slate-900">
             Cancelar
