@@ -167,6 +167,17 @@ const ITENS: ItemMenu[] = [
           </Icone>
         ),
       },
+      {
+        href: "/relatorios/tempo-no-status",
+        rotulo: "Tempo no status",
+        ativo: (p: string) => p === "/relatorios/tempo-no-status",
+        icone: (
+          <Icone>
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </Icone>
+        ),
+      },
     ],
   },
   {

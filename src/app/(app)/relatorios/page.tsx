@@ -19,6 +19,11 @@ const RELATORIOS = [
     titulo: "Relatório de meta",
     descricao: "Quantas unidades cada analista repassou no mês, por empreendimento. Filtra por mês e ano.",
   },
+  {
+    href: "/relatorios/tempo-no-status",
+    titulo: "Tempo no status",
+    descricao: "Unidades cujo status não muda há mais de 5 dias, com a data da última troca. Mesmos filtros da carteira.",
+  },
 ];
 
 export default async function RelatoriosPage() {

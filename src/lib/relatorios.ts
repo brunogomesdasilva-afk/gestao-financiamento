@@ -27,6 +27,15 @@ export function anoMesSaoPaulo(dataIso: string): { ano: number; mes: number } {
   };
 }
 
+// Dias corridos (calendário, no fuso de São Paulo) entre uma data e hoje — ignora o horário, só a
+// data conta, para bater com "está nesse status há N dias" como qualquer pessoa contaria no calendário.
+export function diasCorridosDesde(dataIso: string): number {
+  const soData = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
+  const hoje = new Date(`${soData(new Date())}T00:00:00`);
+  const data = new Date(`${soData(new Date(dataIso))}T00:00:00`);
+  return Math.round((hoje.getTime() - data.getTime()) / 86_400_000);
+}
+
 export type Situacao = "carteira" | "todas";
 
 export type FiltrosRelatorio = {
@@ -181,7 +190,7 @@ export async function carregarConsolidado(supabase: Supabase, situacao: Situacao
   );
 }
 
-export function filtrarConsolidado(linhas: LinhaConsolidado[], f: FiltrosRelatorio): LinhaConsolidado[] {
+export function filtrarConsolidado<T extends LinhaConsolidado>(linhas: T[], f: FiltrosRelatorio): T[] {
   return linhas.filter(
     (l) =>
       (!f.empreendimento || l.empreendimentoId === f.empreendimento) &&
@@ -391,4 +400,94 @@ export async function carregarMetaRepassados(
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   return { empreendimentos, totalGeral };
+}
+
+// ---------- Relatório de tempo no status ----------
+// Unidades em carteira cujo status (etapa) não muda há mais de N dias — mesmos campos e filtros da
+// tela "Minhas unidades", com a data e os dias desde a última troca de status.
+
+export type LinhaTempoNoStatus = LinhaConsolidado & {
+  statusDesde: string;
+  diasNoStatus: number;
+};
+
+export async function carregarTempoNoStatus(supabase: Supabase, diasMinimo: number): Promise<LinhaTempoNoStatus[]> {
+  const [clientes, unidades, { data: torres }, { data: empreendimentos }, { data: etapas }, { data: perfis }, andamento] =
+    await Promise.all([
+      buscarTodos<Cliente>((de, ate) =>
+        supabase.from("clientes").select("*").eq("arquivado", false).order("id").range(de, ate)
+      ),
+      buscarTodos<Pick<Unidade, "id" | "torre_id" | "numero">>((de, ate) =>
+        supabase.from("unidades").select("id, torre_id, numero").order("id").range(de, ate)
+      ),
+      supabase.from("torres").select("*"),
+      supabase.from("empreendimentos").select("*"),
+      supabase.from("etapas").select("*"),
+      supabase.from("profiles").select("id, nome"),
+      buscarTodos<Pick<AndamentoHistorico, "cliente_id" | "etapa_id" | "created_at">>((de, ate) =>
+        supabase.from("andamento_historico").select("cliente_id, etapa_id, created_at").order("id").range(de, ate)
+      ),
+    ]);
+
+  const unidadePorId = new Map(unidades.map((u) => [u.id, u]));
+  const torrePorId = new Map(((torres ?? []) as Torre[]).map((t) => [t.id, t]));
+  const empreendimentoPorId = new Map(((empreendimentos ?? []) as Empreendimento[]).map((e) => [e.id, e]));
+  const etapaPorId = new Map(((etapas ?? []) as Etapa[]).map((e) => [e.id, e]));
+  const analistaPorId = new Map(((perfis ?? []) as { id: string; nome: string }[]).map((p) => [p.id, p.nome]));
+
+  // A transição mais recente para a etapa que é hoje a etapa atual de cada cliente.
+  const etapaAtualPorCliente = new Map(clientes.map((c) => [c.id, c.etapa_atual_id]));
+  const entradaNaEtapaAtual = new Map<string, string>();
+  for (const a of andamento) {
+    if (!a.etapa_id || a.etapa_id !== etapaAtualPorCliente.get(a.cliente_id)) continue;
+    const atual = entradaNaEtapaAtual.get(a.cliente_id);
+    if (!atual || a.created_at > atual) entradaNaEtapaAtual.set(a.cliente_id, a.created_at);
+  }
+
+  const linhas = clientes
+    .map((c): LinhaTempoNoStatus => {
+      const unidade = c.unidade_id ? unidadePorId.get(c.unidade_id) : undefined;
+      const torre = unidade ? torrePorId.get(unidade.torre_id) : undefined;
+      const etapa = c.etapa_atual_id ? etapaPorId.get(c.etapa_atual_id) : undefined;
+      const statusDesde = entradaNaEtapaAtual.get(c.id) ?? c.created_at;
+      return {
+        clienteId: c.id,
+        empreendimentoId: c.empreendimento_id ?? "",
+        empreendimento: (c.empreendimento_id ? empreendimentoPorId.get(c.empreendimento_id)?.nome : undefined) ?? "—",
+        bloco: torre?.nome ?? "—",
+        unidade: unidade?.numero ?? "—",
+        etapaId: c.etapa_atual_id ?? "",
+        etapaOrdem: etapa?.ordem ?? 0,
+        status: etapa?.nome ?? "—",
+        analistaId: c.analista_responsavel_id ?? "",
+        analista: (c.analista_responsavel_id ? analistaPorId.get(c.analista_responsavel_id) : undefined) ?? "—",
+        proprietario: c.nome ?? "",
+        cpf: c.cpf ?? "",
+        telefone: c.telefone ?? "",
+        email: c.email ?? "",
+        banco: c.banco_financiador ?? "",
+        agencia: c.agencia_financiamento ?? "",
+        modalidade: "",
+        validade: c.validade,
+        valorCompra: c.valor_compra ?? null,
+        financiamentoContratado: c.financiamento_contratado,
+        valorAprovado: c.valor_aprovado,
+        diferenca: c.diferenca_aprovacao_contratado,
+        fgtsContratado: c.fgts_contratado,
+        fgtsAtualizacao: c.fgts_atualizacao,
+        terreno: c.terreno,
+        seguro: c.seguro,
+        escritura: c.escritura,
+        situacao: "Em carteira",
+        assumidaEm: c.created_at,
+        atualizadoEm: c.updated_at,
+        observacoes: c.observacoes ?? "",
+        statusDesde,
+        diasNoStatus: diasCorridosDesde(statusDesde),
+      };
+    })
+    .filter((l) => l.diasNoStatus > diasMinimo)
+    .sort((a, b) => b.diasNoStatus - a.diasNoStatus);
+
+  return linhas;
 }
