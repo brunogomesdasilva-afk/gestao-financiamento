@@ -1,24 +1,10 @@
 import { exigirAdmin } from "@/lib/auth";
-import { carregarDash, type ContagemStatus } from "@/lib/relatorios";
+import { emailConfigurado } from "@/lib/email";
+import { anosParaSelecao, carregarDash, MESES, type ContagemStatus } from "@/lib/relatorios";
 import { createClient } from "@/lib/supabase/server";
+import { enviarDashPorEmail } from "./actions";
 
-const MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 const CAMPO = "mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm";
-
-function agoraSaoPaulo(): { ano: number; mes: number } {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-  return {
-    ano: Number(partes.find((p) => p.type === "year")?.value),
-    mes: Number(partes.find((p) => p.type === "month")?.value),
-  };
-}
 
 function Barras({ itens, total }: { itens: ContagemStatus[]; total: number }) {
   return (
@@ -49,17 +35,19 @@ function Barras({ itens, total }: { itens: ContagemStatus[]; total: number }) {
 export default async function DashPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; ano?: string }>;
+  searchParams: Promise<{ mes?: string; ano?: string; empreendimento?: string; erro?: string; ok?: string }>;
 }) {
   await exigirAdmin();
   const sp = await searchParams;
-  const padrao = agoraSaoPaulo();
-  const filtrando = Boolean(sp.mes || sp.ano);
-  const mes = Number(sp.mes) || padrao.mes;
-  const ano = Number(sp.ano) || padrao.ano;
+  const mes = sp.mes ? Number(sp.mes) : null;
+  const ano = sp.ano ? Number(sp.ano) : null;
+  const filtrandoPeriodo = Boolean(mes || ano);
 
   const supabase = await createClient();
-  const empreendimentos = await carregarDash(supabase, filtrando ? { ano, mes } : undefined);
+  const todos = await carregarDash(supabase, filtrandoPeriodo ? { ano, mes } : undefined);
+  const empreendimentos = sp.empreendimento ? todos.filter((e) => e.id === sp.empreendimento) : todos;
+  const rotuloMes = mes ? MESES[mes - 1] : "Todos os meses";
+  const rotuloAno = ano ? String(ano) : "Todos os anos";
 
   return (
     <div>
@@ -70,9 +58,20 @@ export default async function DashPage({
 
       <form method="get" className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <div>
+          <label className="block text-xs font-medium text-slate-500">Empreendimento</label>
+          <select name="empreendimento" defaultValue={sp.empreendimento ?? ""} className={CAMPO}>
+            <option value="">Todos</option>
+            {todos.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="block text-xs font-medium text-slate-500">Mês</label>
-          <select name="mes" defaultValue={filtrando ? mes : ""} className={CAMPO}>
-            <option value="">Todos os períodos</option>
+          <select name="mes" defaultValue={mes ?? ""} className={CAMPO}>
+            <option value="">Todos os meses</option>
             {MESES.map((nome, i) => (
               <option key={nome} value={i + 1}>
                 {nome}
@@ -82,30 +81,70 @@ export default async function DashPage({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-500">Ano</label>
-          <input
-            name="ano"
-            type="number"
-            defaultValue={filtrando ? ano : padrao.ano}
-            min={2020}
-            max={padrao.ano + 1}
-            className={`${CAMPO} w-24`}
-          />
+          <select name="ano" defaultValue={ano ?? ""} className={CAMPO}>
+            <option value="">Todos os anos</option>
+            {anosParaSelecao().map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
         </div>
         <button type="submit" className="rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro">
           Filtrar
         </button>
-        {filtrando && (
+        {(filtrandoPeriodo || sp.empreendimento) && (
           <a href="/relatorios/dash" className="pb-2 text-sm text-slate-500 underline hover:text-slate-900">
-            Ver todos os períodos
+            Limpar filtros
           </a>
         )}
       </form>
-      {filtrando && (
+      {filtrandoPeriodo && (
         <p className="mt-2 text-xs text-slate-400">
-          A análise de financiamento mostra só quem entrou em cada status em {MESES[mes - 1]}/{ano}. O
+          A análise de financiamento mostra só quem entrou em cada status em {rotuloMes}/{rotuloAno}. O
           espelho de vendas (cores) é sempre a situação atual, não filtra por período.
         </p>
       )}
+
+      {sp.erro && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{sp.erro}</p>}
+      {sp.ok && <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sp.ok}</p>}
+
+      <details className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer text-sm font-medium text-slate-700">Enviar por e-mail</summary>
+        {!emailConfigurado() && (
+          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            O envio por e-mail ainda não foi configurado. Adicione ao <code>.env.local</code> as linhas{" "}
+            <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> e{" "}
+            <code>SMTP_FROM</code> (veja o modelo em <code>.env.local.example</code>) e reinicie o servidor.
+          </p>
+        )}
+        <form action={enviarDashPorEmail} className="mt-3 flex flex-wrap items-end gap-3">
+          <input type="hidden" name="mes" value={mes ?? ""} />
+          <input type="hidden" name="ano" value={ano ?? ""} />
+          <input type="hidden" name="empreendimento" value={sp.empreendimento ?? ""} />
+          <div className="min-w-72 flex-1">
+            <label className="block text-xs font-medium text-slate-700">
+              Destinatários (separe por vírgula)
+            </label>
+            <input
+              name="destinatarios"
+              required
+              placeholder="nome@empresa.com, outro@empresa.com"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
+          >
+            Enviar relatório
+          </button>
+        </form>
+        <p className="mt-2 text-xs text-slate-400">
+          O e-mail leva o Excel em anexo (espelho de vendas e análise de financiamento), com os mesmos
+          filtros escolhidos acima.
+        </p>
+      </details>
 
       <div className="mt-6 space-y-6">
         {empreendimentos.map((e) => (
@@ -135,7 +174,7 @@ export default async function DashPage({
         ))}
         {empreendimentos.length === 0 && (
           <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-400">
-            Nenhum empreendimento cadastrado ainda.
+            Nenhum empreendimento encontrado com esses filtros.
           </p>
         )}
       </div>

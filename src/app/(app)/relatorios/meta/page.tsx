@@ -1,24 +1,8 @@
 import { exigirAdmin } from "@/lib/auth";
-import { carregarMetaRepassados } from "@/lib/relatorios";
+import { anosParaSelecao, carregarMetaRepassados, MESES } from "@/lib/relatorios";
 import { createClient } from "@/lib/supabase/server";
 
-const MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 const CAMPO = "mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm";
-
-function agoraSaoPaulo(): { ano: number; mes: number } {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-  return {
-    ano: Number(partes.find((p) => p.type === "year")?.value),
-    mes: Number(partes.find((p) => p.type === "month")?.value),
-  };
-}
 
 export default async function MetaPage({
   searchParams,
@@ -27,9 +11,8 @@ export default async function MetaPage({
 }) {
   await exigirAdmin();
   const sp = await searchParams;
-  const padrao = agoraSaoPaulo();
-  const mes = Number(sp.mes) || padrao.mes;
-  const ano = Number(sp.ano) || padrao.ano;
+  const mes = sp.mes ? Number(sp.mes) : null;
+  const ano = sp.ano ? Number(sp.ano) : null;
 
   const supabase = await createClient();
   const { empreendimentos, totalGeral } = await carregarMetaRepassados(supabase, { ano, mes });
@@ -42,19 +25,22 @@ export default async function MetaPage({
     }
   }
   const ranking = Array.from(totalPorAnalista.values()).sort((x, y) => y.total - x.total);
+  const rotuloMes = mes ? MESES[mes - 1] : "Todos os meses";
+  const rotuloAno = ano ? String(ano) : "Todos os anos";
 
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Relatório de meta</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Unidades que viraram <strong>REPASSADO</strong> no mês escolhido, por analista — contando a
+        Unidades que viraram <strong>REPASSADO</strong> no período escolhido, por analista — contando a
         data em que cada unidade entrou nesse status.
       </p>
 
       <form method="get" className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <div>
           <label className="block text-xs font-medium text-slate-500">Mês</label>
-          <select name="mes" defaultValue={mes} className={CAMPO}>
+          <select name="mes" defaultValue={mes ?? ""} className={CAMPO}>
+            <option value="">Todos os meses</option>
             {MESES.map((nome, i) => (
               <option key={nome} value={i + 1}>
                 {nome}
@@ -64,23 +50,28 @@ export default async function MetaPage({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-500">Ano</label>
-          <input
-            name="ano"
-            type="number"
-            defaultValue={ano}
-            min={2020}
-            max={padrao.ano + 1}
-            className={`${CAMPO} w-24`}
-          />
+          <select name="ano" defaultValue={ano ?? ""} className={CAMPO}>
+            <option value="">Todos os anos</option>
+            {anosParaSelecao().map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
         </div>
         <button type="submit" className="rounded-md bg-marca px-4 py-2 text-sm font-medium text-white hover:bg-marca-escuro">
           Filtrar
         </button>
+        {(mes || ano) && (
+          <a href="/relatorios/meta" className="pb-2 text-sm text-slate-500 underline hover:text-slate-900">
+            Ver todo o período
+          </a>
+        )}
       </form>
 
       <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <h2 className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-900">
-          Total por analista — {MESES[mes - 1]}/{ano}
+          Total por analista — {rotuloMes}/{rotuloAno}
         </h2>
         {ranking.length > 0 ? (
           <table className="w-full text-sm">
@@ -99,7 +90,7 @@ export default async function MetaPage({
           </table>
         ) : (
           <p className="px-4 py-6 text-center text-sm text-slate-400">
-            Nenhuma unidade repassada em {MESES[mes - 1]}/{ano}.
+            Nenhuma unidade repassada em {rotuloMes}/{rotuloAno}.
           </p>
         )}
       </div>

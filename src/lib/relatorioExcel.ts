@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import type { LinhaConsolidado } from "@/lib/relatorios";
+import type { DashEmpreendimento, LinhaConsolidado } from "@/lib/relatorios";
 
 type Coluna = {
   titulo: string;
@@ -87,6 +87,55 @@ export async function gerarExcelConsolidado(linhas: LinhaConsolidado[]): Promise
     from: { row: LINHA_CABECALHO, column: 1 },
     to: { row: LINHA_CABECALHO, column: COLUNAS.length },
   };
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+// Dash por empreendimento: uma planilha com o espelho de vendas (situação atual, sempre) e outra
+// com a análise de financiamento (respeita o período filtrado, se houver).
+export async function gerarExcelDash(
+  empreendimentos: DashEmpreendimento[],
+  rotuloPeriodo: string
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const logoBuffer = (await fs.readFile(
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "logo-credimoveis-fundo-claro.png")
+  )) as unknown as ExcelJS.Buffer;
+
+  function montarPlanilha(nome: string, rotuloColuna: string, extrair: (e: DashEmpreendimento) => { nome: string; qtd: number }[]) {
+    const planilha = workbook.addWorksheet(nome);
+    planilha.columns = [
+      { header: "Empreendimento", width: 28 },
+      { header: rotuloColuna, width: 26 },
+      { header: "Quantidade", width: 14 },
+    ];
+    for (let i = 1; i <= LINHAS_DO_LOGO; i++) planilha.getRow(i).height = ALTURA_LINHA_LOGO;
+    const logo = workbook.addImage({ buffer: logoBuffer, extension: "png" });
+    planilha.addImage(logo, { tl: { col: 0.1, row: 0.2 }, ext: { width: LOGO_LARGURA_PX, height: LOGO_ALTURA_PX } });
+
+    const cabecalho = planilha.getRow(LINHA_CABECALHO);
+    cabecalho.getCell(1).value = "Empreendimento";
+    cabecalho.getCell(2).value = rotuloColuna;
+    cabecalho.getCell(3).value = "Quantidade";
+    for (const e of empreendimentos) {
+      for (const item of extrair(e)) {
+        planilha.addRow([e.nome, item.nome, item.qtd]);
+      }
+    }
+    cabecalho.font = { bold: true };
+    cabecalho.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2E8F0" } };
+    });
+    planilha.views = [{ state: "frozen", ySplit: LINHA_CABECALHO }];
+    planilha.autoFilter = { from: { row: LINHA_CABECALHO, column: 1 }, to: { row: LINHA_CABECALHO, column: 3 } };
+    return planilha;
+  }
+
+  // Nomes de aba do Excel não podem ter / \ ? * [ ] nem passar de 31 caracteres.
+  const nomeAbaAnalise = `Analise ${rotuloPeriodo}`.replace(/[/\\?*[\]:]/g, "-").slice(0, 31);
+
+  montarPlanilha("Espelho de vendas", "Status", (e) => e.unidadesPorStatus.map((s) => ({ nome: s.nome, qtd: s.qtd })));
+  montarPlanilha(nomeAbaAnalise, "Status da análise", (e) => e.analisePorEtapa.map((s) => ({ nome: s.nome, qtd: s.qtd })));
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

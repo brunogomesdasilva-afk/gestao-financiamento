@@ -27,6 +27,29 @@ export function anoMesSaoPaulo(dataIso: string): { ano: number; mes: number } {
   };
 }
 
+export const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+export function anoMesAtualSaoPaulo(): { ano: number; mes: number } {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  return {
+    ano: Number(partes.find((p) => p.type === "year")?.value),
+    mes: Number(partes.find((p) => p.type === "month")?.value),
+  };
+}
+
+// Anos para os seletores de período: do ano atual + 1 até 5 anos atrás, do mais recente pro mais antigo.
+export function anosParaSelecao(): number[] {
+  const { ano } = anoMesAtualSaoPaulo();
+  return Array.from({ length: 7 }, (_, i) => ano + 1 - i);
+}
+
 // Dias corridos (calendário, no fuso de São Paulo) entre uma data e hoje — ignora o horário, só a
 // data conta, para bater com "está nesse status há N dias" como qualquer pessoa contaria no calendário.
 export function diasCorridosDesde(dataIso: string): number {
@@ -214,9 +237,22 @@ export type DashEmpreendimento = {
   analisePorEtapa: ContagemStatus[]; // status da esteira de análise de financiamento
 };
 
-export type PeriodoRelatorio = { ano: number; mes: number };
+// null em ano ou mês significa "qualquer um" (todos os anos / todos os meses).
+export type PeriodoRelatorio = { ano: number | null; mes: number | null };
+
+function periodoAtivo(periodo?: PeriodoRelatorio): boolean {
+  return Boolean(periodo && (periodo.ano != null || periodo.mes != null));
+}
+
+function dataNoPeriodo(dataIso: string, periodo: PeriodoRelatorio): boolean {
+  const { ano, mes } = anoMesSaoPaulo(dataIso);
+  if (periodo.ano != null && ano !== periodo.ano) return false;
+  if (periodo.mes != null && mes !== periodo.mes) return false;
+  return true;
+}
 
 export async function carregarDash(supabase: Supabase, periodo?: PeriodoRelatorio): Promise<DashEmpreendimento[]> {
+  const filtrando = periodoAtivo(periodo);
   const [{ data: empreendimentos }, { data: torres }, unidades, clientes, { data: etapas }, { data: statusUnidade }, andamento] =
     await Promise.all([
       supabase.from("empreendimentos").select("*").order("nome"),
@@ -235,7 +271,7 @@ export async function carregarDash(supabase: Supabase, periodo?: PeriodoRelatori
       supabase.from("etapas").select("*").order("ordem", { ascending: true }),
       supabase.from("status_unidade").select("*").order("ordem"),
       // Só busca o andamento completo quando há filtro de período (senão a contagem é sempre a atual).
-      periodo
+      filtrando
         ? buscarTodos<Pick<AndamentoHistorico, "cliente_id" | "etapa_id" | "created_at">>((de, ate) =>
             supabase.from("andamento_historico").select("cliente_id, etapa_id, created_at").order("id").range(de, ate)
           )
@@ -251,7 +287,7 @@ export async function carregarDash(supabase: Supabase, periodo?: PeriodoRelatori
   // Data em que cada cliente entrou na etapa que é hoje a etapa atual dele (a transição mais recente
   // para essa etapa específica). Usada só quando um período foi escolhido.
   let entradaNaEtapaAtual: Map<string, string> | null = null;
-  if (periodo) {
+  if (filtrando) {
     const etapaAtualPorCliente = new Map(clientes.map((c) => [c.id, c.etapa_atual_id]));
     entradaNaEtapaAtual = new Map();
     for (const a of andamento) {
@@ -274,11 +310,9 @@ export async function carregarDash(supabase: Supabase, periodo?: PeriodoRelatori
     let emAnalise = 0;
     for (const c of clientes) {
       if (c.empreendimento_id !== e.id) continue;
-      if (periodo) {
+      if (filtrando) {
         const dataEntrada = entradaNaEtapaAtual?.get(c.id);
-        if (!dataEntrada) continue;
-        const { ano, mes } = anoMesSaoPaulo(dataEntrada);
-        if (ano !== periodo.ano || mes !== periodo.mes) continue;
+        if (!dataEntrada || !dataNoPeriodo(dataEntrada, periodo!)) continue;
       }
       emAnalise++;
       if (c.etapa_atual_id) porEtapa.set(c.etapa_atual_id, (porEtapa.get(c.etapa_atual_id) ?? 0) + 1);
@@ -347,9 +381,7 @@ export async function carregarMetaRepassados(
 
   const clientesNoPeriodo = clientes.filter((c) => {
     const data = repassadoEmPorCliente.get(c.id);
-    if (!data) return false;
-    const { ano, mes } = anoMesSaoPaulo(data);
-    return ano === periodo.ano && mes === periodo.mes;
+    return data ? dataNoPeriodo(data, periodo) : false;
   });
 
   const unidadeIds = clientesNoPeriodo.map((c) => c.unidade_id).filter((id): id is string => Boolean(id));
