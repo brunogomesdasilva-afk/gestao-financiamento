@@ -152,14 +152,15 @@ export default async function CarteiraPage({
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-4 py-2 font-medium">Empreendimento</th>
-              <th className="px-4 py-2 font-medium">Bloco</th>
-              <th className="px-4 py-2 font-medium">Unidade</th>
-              <th className="px-4 py-2 font-medium">Proprietário</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Assumida em</th>
-              <th className="px-4 py-2 font-medium">Analista</th>
-              <th className="w-12 px-2 py-2">
+              <th className="px-2.5 py-1.5 font-medium">Empreendimento</th>
+              <th className="px-2.5 py-1.5 font-medium">Bloco</th>
+              <th className="px-2.5 py-1.5 font-medium">Unidade</th>
+              <th className="px-2.5 py-1.5 font-medium">Proprietário</th>
+              <th className="px-2.5 py-1.5 font-medium">Status</th>
+              <th className="px-2.5 py-1.5 font-medium">Assumida em</th>
+              <th className="px-2.5 py-1.5 font-medium">Analista</th>
+              <th className="px-2.5 py-1.5 font-medium">Conferência SIOP</th>
+              <th className="w-10 px-1.5 py-1.5">
                 <span className="sr-only">Ações</span>
               </th>
             </tr>
@@ -169,17 +170,17 @@ export default async function CarteiraPage({
               const podeAlterar = atual.perfil === "admin" || l.analistaId === atual.id;
               return (
                 <tr key={l.cliente.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 text-slate-900">{l.empreendimento}</td>
-                  <td className="px-4 py-2 text-slate-600">{l.bloco}</td>
-                  <td className="px-4 py-2 font-medium text-slate-900">
+                  <td className="px-2.5 py-1.5 text-slate-900">{l.empreendimento}</td>
+                  <td className="px-2.5 py-1.5 text-slate-600">{l.bloco}</td>
+                  <td className="px-2.5 py-1.5 font-medium text-slate-900">
                     <Link href={`/clientes/${l.cliente.id}`} className="hover:underline">
                       {l.unidade}
                     </Link>
                   </td>
-                  <td className="px-4 py-2 text-slate-600">{l.cliente.nome ?? "Proprietário não informado"}</td>
-                  <td className="px-4 py-2 text-slate-600">
+                  <td className="px-2.5 py-1.5 text-slate-600">{l.cliente.nome ?? "Proprietário não informado"}</td>
+                  <td className="px-2.5 py-1.5 text-slate-600">
                     {l.etapaCor ? (
-                      <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: l.etapaCor }} />
                         {l.etapa}
                       </span>
@@ -187,11 +188,18 @@ export default async function CarteiraPage({
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-2 text-slate-600">
+                  <td className="px-2.5 py-1.5 text-slate-600">
                     {new Date(l.cliente.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                   </td>
-                  <td className="px-4 py-2 text-slate-600">{l.analista}</td>
-                  <td className="px-2 py-2 text-right">
+                  <td className="px-2.5 py-1.5 text-slate-600">{l.analista}</td>
+                  <td className="px-2.5 py-1.5 text-slate-600">
+                    {l.cliente.siop_conferido_em
+                      ? new Date(l.cliente.siop_conferido_em).toLocaleDateString("pt-BR", {
+                          timeZone: "America/Sao_Paulo",
+                        })
+                      : "—"}
+                  </td>
+                  <td className="px-1.5 py-1.5 text-right">
                     {podeAlterar ? (
                       <MenuAcoesUnidade
                         clienteId={l.cliente.id}
@@ -212,7 +220,7 @@ export default async function CarteiraPage({
             })}
             {visiveis.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-slate-400">
                   {linhas.length === 0
                     ? analistaSelecionado === atual.id
                       ? "Você ainda não tem nenhuma unidade."

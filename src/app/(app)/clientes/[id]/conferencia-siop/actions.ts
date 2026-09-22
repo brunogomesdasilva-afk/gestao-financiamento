@@ -60,5 +60,9 @@ export async function conferirUploadAction(
   }
 
   const resultado = await conferirUnidadeComArquivo(paraConferir, conteudo, arquivo.name);
+
+  // Registra quando a conferência foi feita, independente do resultado (conferido, divergente...).
+  await supabase.from("clientes").update({ siop_conferido_em: new Date().toISOString() }).eq("id", clienteId);
+
   return { resultado, erro: null };
 }

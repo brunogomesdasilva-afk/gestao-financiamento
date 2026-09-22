@@ -21,7 +21,7 @@ export type SelecaoFiltros = {
   situacao?: string;
 };
 
-const SELECT = "mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm";
+const SELECT = "mt-0.5 rounded-md border border-slate-300 px-2 py-1.5 text-sm";
 
 function unicos<T>(itens: T[], chave: (i: T) => string): T[] {
   const vistos = new Set<string>();
@@ -96,7 +96,7 @@ export function FiltrosCarteira({
   );
 
   return (
-    <div className="mt-6 flex flex-wrap items-end gap-3">
+    <div className="mt-6 flex flex-wrap items-end gap-2">
       <div>
         <label className="block text-xs font-medium text-slate-700">Empreendimento</label>
         <select

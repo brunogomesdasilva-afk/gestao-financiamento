@@ -65,6 +65,15 @@ export default async function ResultadoConferenciaPage({
   );
   const contagem = (s: SituacaoConferencia) => resultados.filter((r) => r.situacao === s).length;
 
+  // Registra a data da conferência nas unidades que realmente tinham PDF para comparar.
+  const idsConferidos = resultados.filter((r) => r.situacao !== "sem-pdf").map((r) => r.clienteId);
+  if (idsConferidos.length > 0) {
+    await supabase
+      .from("clientes")
+      .update({ siop_conferido_em: new Date().toISOString() })
+      .in("id", idsConferidos);
+  }
+
   return (
     <div>
       <Link href="/conferencia-siop/nova" className="text-xs text-slate-500 hover:text-slate-900">

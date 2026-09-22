@@ -89,6 +89,7 @@ export type Cliente = {
   etapa_atual_id: string | null;
   observacoes: string | null;
   arquivado: boolean;
+  siop_conferido_em: string | null;
   created_at: string;
   updated_at: string;
 };
