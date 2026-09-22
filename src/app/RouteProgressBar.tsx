@@ -1,23 +1,41 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-// Barra de carregamento no topo da tela: aparece assim que o usuário clica em um link ou envia um
-// formulário (inclusive os que chamam uma ação do servidor), e some quando a navegação termina.
-// Sem isso, uma consulta um pouco mais lenta no Supabase passa a impressão de que o sistema travou.
+// Indicador de que o sistema está trabalhando: a barra fina no topo (mais discreta) e um aviso na
+// própria tela, com cronômetro, para ficar claro que não travou — só aparece de verdade depois de
+// meio segundo, para não piscar em ações rápidas.
 export function RouteProgressBar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [andamento, setAndamento] = useState(0); // 0 = escondida
+  const [largura, setLargura] = useState(0); // 0 = barra escondida
+  const [avisoVisivel, setAvisoVisivel] = useState(false);
+  const [segundos, setSegundos] = useState(0);
   const tempoLimite = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const atrasoAviso = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervaloSegundos = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function iniciar() {
+  const pararTudo = useCallback(() => {
+    setLargura(0);
+    setAvisoVisivel(false);
+    setSegundos(0);
     if (tempoLimite.current) clearTimeout(tempoLimite.current);
-    setAndamento(80);
+    if (atrasoAviso.current) clearTimeout(atrasoAviso.current);
+    if (intervaloSegundos.current) clearInterval(intervaloSegundos.current);
+  }, []);
+
+  const iniciar = useCallback(() => {
+    pararTudo();
+    setLargura(80);
+    // O aviso na tela (com cronômetro) só aparece se demorar mais que meio segundo.
+    atrasoAviso.current = setTimeout(() => {
+      setAvisoVisivel(true);
+      intervaloSegundos.current = setInterval(() => setSegundos((s) => s + 1), 1000);
+    }, 500);
     // Trava de segurança: nunca fica presa na tela, mesmo numa navegação que não muda a URL.
-    tempoLimite.current = setTimeout(() => setAndamento(0), 8000);
-  }
+    tempoLimite.current = setTimeout(pararTudo, 20000);
+  }, [pararTudo]);
 
   useEffect(() => {
     function aoClicar(e: MouseEvent) {
@@ -40,13 +58,13 @@ export function RouteProgressBar() {
       document.removeEventListener("click", aoClicar);
       document.removeEventListener("submit", aoEnviarFormulario);
     };
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, iniciar]);
 
   // A URL efetiva mudou: a navegação (ou o redirecionamento da ação) terminou.
   useEffect(() => {
-    if (andamento === 0) return;
-    const conclusao = requestAnimationFrame(() => setAndamento(100));
-    const escondida = setTimeout(() => setAndamento(0), 200);
+    if (largura === 0) return;
+    const conclusao = requestAnimationFrame(() => setLargura(100));
+    const escondida = setTimeout(pararTudo, 200);
     return () => {
       cancelAnimationFrame(conclusao);
       clearTimeout(escondida);
@@ -54,14 +72,28 @@ export function RouteProgressBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, searchParams]);
 
-  if (andamento === 0) return null;
-
   return (
-    <div className="fixed inset-x-0 top-0 z-[100] h-0.5 bg-transparent" aria-hidden="true">
-      <div
-        className="h-full bg-marca-claro shadow-[0_0_8px_var(--color-marca-claro)] transition-all ease-out"
-        style={{ width: `${andamento}%`, transitionDuration: andamento === 100 ? "150ms" : "600ms" }}
-      />
-    </div>
+    <>
+      {largura > 0 && (
+        <div className="fixed inset-x-0 top-0 z-[100] h-0.5 bg-transparent" aria-hidden="true">
+          <div
+            className="h-full bg-marca-claro shadow-[0_0_8px_var(--color-marca-claro)] transition-all ease-out"
+            style={{ width: `${largura}%`, transitionDuration: largura === 100 ? "150ms" : "600ms" }}
+          />
+        </div>
+      )}
+      {avisoVisivel && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 rounded-full bg-grafite px-4 py-2.5 text-sm text-white shadow-lg"
+        >
+          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          <span>
+            Atualizando<span className="tabular-nums text-slate-300">… {segundos}s</span>
+          </span>
+        </div>
+      )}
+    </>
   );
 }
