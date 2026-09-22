@@ -8,6 +8,7 @@ import {
   alterarPerfilUsuario,
   alterarStatusUsuario,
   criarUsuario,
+  redefinirSenhaUsuario,
 } from "./actions";
 import { MenuAcoesUsuario } from "./MenuAcoesUsuario";
 
@@ -59,10 +60,16 @@ async function unidadesDoUsuario(
 export default async function UsuariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; ok?: string; inativar?: string; editarEmail?: string }>;
+  searchParams: Promise<{
+    erro?: string;
+    ok?: string;
+    inativar?: string;
+    editarEmail?: string;
+    redefinirSenha?: string;
+  }>;
 }) {
   const atual = await exigirAdmin();
-  const { erro, ok, inativar, editarEmail } = await searchParams;
+  const { erro, ok, inativar, editarEmail, redefinirSenha } = await searchParams;
 
   const supabase = await createClient();
   const { data } = await supabase.from("profiles").select("*").order("nome");
@@ -72,6 +79,7 @@ export default async function UsuariosPage({
 
   const alvoInativar = inativar && inativar !== atual.id ? usuarios.find((u) => u.id === inativar && u.ativo !== false) : undefined;
   const alvoEmail = editarEmail ? usuarios.find((u) => u.id === editarEmail) : undefined;
+  const alvoSenha = redefinirSenha ? usuarios.find((u) => u.id === redefinirSenha) : undefined;
   const unidadesAlvo =alvoInativar ? await unidadesDoUsuario(supabase, alvoInativar.id) : [];
   const destinos = usuarios.filter((u) => u.ativo !== false && u.id !== alvoInativar?.id);
 
@@ -112,6 +120,41 @@ export default async function UsuariosPage({
                 className="rounded-md bg-marca px-3 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
               >
                 Salvar e-mail
+              </button>
+              <Link href="/usuarios" className="text-sm text-slate-600 underline hover:text-slate-900">
+                Cancelar
+              </Link>
+            </div>
+          </form>
+        )}
+
+        {alvoSenha && (
+          <form
+            action={redefinirSenhaUsuario.bind(null, alvoSenha.id)}
+            className="mt-4 rounded-xl border border-slate-300 bg-white p-5"
+          >
+            <h2 className="text-sm font-semibold text-slate-900">Redefinir senha de {alvoSenha.nome}</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Ele passa a entrar com essa senha. Avise-o pessoalmente (telefone, presencialmente etc.) —
+              a senha não fica registrada em nenhum lugar do sistema.
+            </p>
+            <label className="mt-3 block text-sm font-medium text-slate-700">Senha nova</label>
+            <input name="senha" type="password" required minLength={6} autoComplete="new-password" className={CAMPO} />
+            <label className="mt-3 block text-sm font-medium text-slate-700">Confirme a senha nova</label>
+            <input
+              name="confirmacao"
+              type="password"
+              required
+              minLength={6}
+              autoComplete="new-password"
+              className={CAMPO}
+            />
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="submit"
+                className="rounded-md bg-marca px-3 py-2 text-sm font-medium text-white hover:bg-marca-escuro"
+              >
+                Salvar senha nova
               </button>
               <Link href="/usuarios" className="text-sm text-slate-600 underline hover:text-slate-900">
                 Cancelar
@@ -255,6 +298,13 @@ export default async function UsuariosPage({
                           className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                         >
                           Alterar e-mail
+                        </Link>
+                        <Link
+                          href={`/usuarios?redefinirSenha=${u.id}`}
+                          role="menuitem"
+                          className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          Redefinir senha
                         </Link>
                         {u.ativo === false ? (
                           <form action={alterarStatusUsuario.bind(null, u.id)}>

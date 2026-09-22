@@ -107,6 +107,35 @@ export async function alterarEmailUsuario(usuarioId: string, formData: FormData)
   voltar({ ok: "E-mail atualizado. O usuário passa a entrar com o novo e-mail." });
 }
 
+// O administrador define uma senha nova para outro usuário (por exemplo, para destravar alguém que
+// esqueceu a senha inicial e não tem acesso ao e-mail no momento). O usuário passa a entrar com essa
+// senha; vale a pena avisá-lo por fora do sistema (telefone, presencialmente etc.), nunca por aqui.
+export async function redefinirSenhaUsuario(usuarioId: string, formData: FormData) {
+  await exigirAdmin();
+  const senha = String(formData.get("senha") ?? "");
+  const confirmacao = String(formData.get("confirmacao") ?? "");
+
+  if (senha.length < 6) {
+    voltar({ erro: "A senha precisa ter pelo menos 6 caracteres.", redefinirSenha: usuarioId });
+  }
+  if (senha !== confirmacao) {
+    voltar({ erro: "As senhas não coincidem.", redefinirSenha: usuarioId });
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    voltar({
+      erro: "Chave de serviço do Supabase não configurada (SUPABASE_SERVICE_ROLE_KEY).",
+      redefinirSenha: usuarioId,
+    });
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(usuarioId, { password: senha });
+  if (error) voltar({ erro: error.message, redefinirSenha: usuarioId });
+
+  voltar({ ok: "Senha redefinida. Avise o usuário pessoalmente — não fica registrado em nenhum lugar." });
+}
+
 // Ativa ou inativa um usuário (nunca exclui, para preservar o histórico). Ao inativar, as unidades
 // em andamento dele são transferidas ao analista escolhido, e cada transferência fica registrada
 // no histórico da unidade com o nome do administrador que fez a alteração.

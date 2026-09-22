@@ -359,12 +359,31 @@ export function Sidebar({
       </nav>
 
       <div className="border-t border-white/10 p-2">
-        {!recolhido && (
-          <p className="truncate px-3 py-1 text-xs text-slate-400">
-            {nome}
-            {perfil === "admin" ? " · administrador" : ""}
-          </p>
-        )}
+        <Link
+          href="/minha-conta"
+          title={recolhido ? "Minha conta" : undefined}
+          aria-label="Minha conta"
+          aria-current={pathname === "/minha-conta" ? "page" : undefined}
+          className={`flex items-center gap-3 truncate rounded-md px-3 py-1.5 text-xs ${
+            recolhido ? "justify-center" : ""
+          } ${
+            pathname === "/minha-conta"
+              ? "bg-white/10 font-medium text-white"
+              : "text-slate-400 hover:bg-white/5 hover:text-white"
+          }`}
+        >
+          {recolhido ? (
+            <Icone>
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+            </Icone>
+          ) : (
+            <span className="truncate">
+              {nome}
+              {perfil === "admin" ? " · administrador" : ""}
+            </span>
+          )}
+        </Link>
         <form action={logout}>
           <button
             type="submit"
