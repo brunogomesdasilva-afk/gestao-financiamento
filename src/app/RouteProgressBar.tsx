@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -83,15 +84,26 @@ export function RouteProgressBar() {
         </div>
       )}
       {avisoVisivel && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 rounded-full bg-grafite px-4 py-2.5 text-sm text-white shadow-lg"
-        >
-          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          <span>
-            Atualizando<span className="tabular-nums text-slate-300">… {segundos}s</span>
-          </span>
+        <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-col items-center gap-3 rounded-2xl bg-white/95 px-8 py-6 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm"
+          >
+            <div className="relative h-14 w-14">
+              <span className="absolute inset-0 animate-spin rounded-full border-2 border-slate-200 border-t-marca" />
+              <Image
+                src="/logo-icone-fundo-claro.png"
+                alt=""
+                width={357}
+                height={337}
+                className="absolute inset-0 m-auto h-6 w-auto"
+              />
+            </div>
+            <p className="text-sm text-slate-600">
+              Atualizando<span className="tabular-nums text-slate-400">… {segundos}s</span>
+            </p>
+          </div>
         </div>
       )}
     </>
