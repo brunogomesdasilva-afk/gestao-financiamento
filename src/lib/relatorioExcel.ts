@@ -1,6 +1,5 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import ExcelJS from "exceljs";
+import { LOGO_FUNDO_CLARO_BASE64 } from "@/lib/logoBase64";
 import type { DashEmpreendimento, LinhaConsolidado } from "@/lib/relatorios";
 
 type Coluna = {
@@ -63,10 +62,7 @@ export async function gerarExcelConsolidado(linhas: LinhaConsolidado[]): Promise
   });
 
   for (let i = 1; i <= LINHAS_DO_LOGO; i++) planilha.getRow(i).height = ALTURA_LINHA_LOGO;
-  const logo = workbook.addImage({
-    buffer: (await fs.readFile(path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "logo-credimoveis-fundo-claro.png"))) as unknown as ExcelJS.Buffer,
-    extension: "png",
-  });
+  const logo = workbook.addImage({ base64: LOGO_FUNDO_CLARO_BASE64, extension: "png" });
   planilha.addImage(logo, { tl: { col: 0.1, row: 0.2 }, ext: { width: LOGO_LARGURA_PX, height: LOGO_ALTURA_PX } });
 
   const cabecalho = planilha.getRow(LINHA_CABECALHO);
@@ -98,10 +94,6 @@ export async function gerarExcelDash(
   rotuloPeriodo: string
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  const logoBuffer = (await fs.readFile(
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "logo-credimoveis-fundo-claro.png")
-  )) as unknown as ExcelJS.Buffer;
-
   function montarPlanilha(nome: string, rotuloColuna: string, extrair: (e: DashEmpreendimento) => { nome: string; qtd: number }[]) {
     const planilha = workbook.addWorksheet(nome);
     planilha.columns = [
@@ -110,7 +102,7 @@ export async function gerarExcelDash(
       { header: "Quantidade", width: 14 },
     ];
     for (let i = 1; i <= LINHAS_DO_LOGO; i++) planilha.getRow(i).height = ALTURA_LINHA_LOGO;
-    const logo = workbook.addImage({ buffer: logoBuffer, extension: "png" });
+    const logo = workbook.addImage({ base64: LOGO_FUNDO_CLARO_BASE64, extension: "png" });
     planilha.addImage(logo, { tl: { col: 0.1, row: 0.2 }, ext: { width: LOGO_LARGURA_PX, height: LOGO_ALTURA_PX } });
 
     const cabecalho = planilha.getRow(LINHA_CABECALHO);

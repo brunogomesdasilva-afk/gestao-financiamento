@@ -57,12 +57,11 @@ export async function enviarDashPorEmail(formData: FormData) {
   const rotuloPeriodo = mes || ano ? `${mes ? MESES[Number(mes) - 1] : "Todos os meses"}-${ano ?? "Todos os anos"}` : "Situação atual";
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const nomeBase = `dash-empreendimentos-${hoje.replace(/\//g, "-")}`;
-  const [excel, pdf] = await Promise.all([
-    gerarExcelDash(empreendimentos, rotuloPeriodo),
-    gerarPdfDash(empreendimentos, rotuloPeriodo),
-  ]);
-
   try {
+    const [excel, pdf] = await Promise.all([
+      gerarExcelDash(empreendimentos, rotuloPeriodo),
+      gerarPdfDash(empreendimentos, rotuloPeriodo),
+    ]);
     await enviarEmail({
       para: destinatarios,
       assunto: `Dash por empreendimento - ${hoje}`,

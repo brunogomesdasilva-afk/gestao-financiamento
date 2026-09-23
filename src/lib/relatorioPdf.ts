@@ -1,6 +1,5 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import PDFDocument from "pdfkit";
+import { LOGO_FUNDO_CLARO_BASE64 } from "@/lib/logoBase64";
 import type { DashEmpreendimento, LinhaConsolidado } from "@/lib/relatorios";
 
 const GRAFITE = "#32363a";
@@ -9,9 +8,7 @@ const TEXTO = "#0f172a";
 const ZEBRA = "#f8fafc";
 
 async function logoBuffer(): Promise<Buffer> {
-  return fs.readFile(
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "logo-credimoveis-fundo-claro.png")
-  );
+  return Buffer.from(LOGO_FUNDO_CLARO_BASE64, "base64");
 }
 
 function moeda(v: number | null) {

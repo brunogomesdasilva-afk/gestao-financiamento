@@ -51,9 +51,8 @@ export async function enviarConsolidadoPorEmail(formData: FormData) {
 
   const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const nomeBase = `relatorio-consolidado-${hoje.replace(/\//g, "-")}`;
-  const [excel, pdf] = await Promise.all([gerarExcelConsolidado(linhas), gerarPdfConsolidado(linhas)]);
-
   try {
+    const [excel, pdf] = await Promise.all([gerarExcelConsolidado(linhas), gerarPdfConsolidado(linhas)]);
     await enviarEmail({
       para: destinatarios,
       assunto: `Relatório consolidado de financiamentos - ${hoje}`,
