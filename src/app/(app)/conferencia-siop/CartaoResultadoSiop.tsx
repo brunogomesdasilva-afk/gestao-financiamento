@@ -45,7 +45,7 @@ export function CartaoResultadoSiop({ r }: { r: ResultadoUnidade }) {
 
       <div className="space-y-3 border-t border-slate-200 px-4 py-3 text-sm">
         <p className="text-xs text-slate-500">
-          Arquivo: {r.arquivo ?? "não encontrado na pasta do empreendimento"}
+          Arquivo: {r.arquivo ?? "—"}
           {r.proponente ? ` · Proponente no PDF: ${r.proponente}` : ""}
         </p>
 

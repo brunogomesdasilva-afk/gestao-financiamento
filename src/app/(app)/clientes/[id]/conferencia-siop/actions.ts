@@ -6,8 +6,7 @@ import type { Cliente, Torre, Unidade } from "@/lib/database.types";
 
 export type EstadoConferenciaAvulsa = { resultado: ResultadoUnidade | null; erro: string | null };
 
-// Conferência avulsa de uma unidade: o PDF é escolhido na hora pelo usuário (não precisa estar na
-// pasta SIOP). Os dados do lado "sistema" vêm sempre do banco — nunca do formulário — para a
+// Conferência de uma unidade: o PDF é escolhido na hora pelo usuário. Os dados do lado "sistema" vêm sempre do banco — nunca do formulário — para a
 // conferência ter valor: é o cadastro confiável que está sendo validado contra o PDF.
 export async function conferirUploadAction(
   clienteId: string,

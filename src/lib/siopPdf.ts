@@ -26,15 +26,6 @@ export function normalizarUnidade(unidade: string): string {
     .replace(/^0+(?=\d)/, "");
 }
 
-// Nomes aceitos: "SIOPI - 103 - A.pdf", "SIOP-103-Torre A.pdf", "siopi  -  1705  -  bloco 2.pdf"...
-export function interpretarNomeArquivo(nome: string): { unidade: string; torre: string } | null {
-  const base = normalizar(nome.replace(/\.pdf$/i, ""));
-  const m = /^siopi?\s*[-–_]\s*([a-z0-9]+)\s*[-–_]\s*(.+)$/.exec(base);
-  if (!m) return null;
-  const torre = indiceTorre(m[2]);
-  return torre ? { unidade: normalizarUnidade(m[1]), torre } : null;
-}
-
 export type ValoresSiop = {
   encontrouSecao5: boolean;
   valorCompra: number | null;

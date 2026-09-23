@@ -1,27 +1,4 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import {
-  extrairValoresSiop,
-  indiceTorre,
-  interpretarNomeArquivo,
-  lerTextoPdf,
-  normalizarUnidade,
-  type ValoresSiop,
-} from "./siopPdf";
-
-// A pasta SIOP fica ao lado das demais (Empreendimentos, Espelhos de vendas), fora do projeto.
-export function pastaSiop(): string {
-  return process.env.SIOP_PASTA ?? path.resolve(/*turbopackIgnore: true*/ process.cwd(), "..", "SIOP");
-}
-
-function normalizarNome(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim()
-    .toLowerCase();
-}
+import { extrairValoresSiop, indiceTorre, lerTextoPdf, normalizarUnidade, type ValoresSiop } from "./siopPdf";
 
 export type ClienteParaConferir = {
   clienteId: string;
@@ -86,9 +63,7 @@ function compararCampo(
   return { chave, rotulo, sistema, pdf, resultado };
 }
 
-// Lê o PDF (já em memória) e compara com o cadastro do cliente — usada tanto na conferência por
-// pasta (arquivo já lido do disco) quanto na conferência avulsa (arquivo escolhido na hora pelo
-// usuário, sem precisar estar na pasta SIOP).
+// Lê o PDF (já em memória) e compara com o cadastro do cliente.
 async function avaliarPdf(
   cliente: ClienteParaConferir,
   conteudo: Uint8Array,
@@ -131,8 +106,7 @@ async function avaliarPdf(
   return { ...parcial, situacao, campos, identificacao, proponente: valores.proponente };
 }
 
-// Conferência avulsa: o usuário escolhe o PDF na hora, para uma única unidade, sem precisar que o
-// arquivo esteja na pasta SIOP.
+// Conferência de uma unidade: o usuário escolhe o PDF na hora.
 export async function conferirUnidadeComArquivo(
   cliente: ClienteParaConferir,
   conteudo: Uint8Array,
@@ -151,128 +125,4 @@ export async function conferirUnidadeComArquivo(
     avisos: [],
   };
   return avaliarPdf(cliente, conteudo, parcial);
-}
-
-export type ResultadoConferencia = {
-  pasta: string;
-  pastaDoEmpreendimento: string | null;
-  erro: string | null;
-  resultados: ResultadoUnidade[];
-  pdfsSemCadastro: string[];
-  arquivosNaoReconhecidos: string[];
-};
-
-export async function conferirEmpreendimento(
-  nomeEmpreendimento: string,
-  clientes: ClienteParaConferir[]
-): Promise<ResultadoConferencia> {
-  const base = pastaSiop();
-  const vazio = (erro: string, pastaDoEmpreendimento: string | null = null): ResultadoConferencia => ({
-    pasta: base,
-    pastaDoEmpreendimento,
-    erro,
-    resultados: [],
-    pdfsSemCadastro: [],
-    arquivosNaoReconhecidos: [],
-  });
-
-  let pastasDoSiop;
-  try {
-    pastasDoSiop = await fs.readdir(base, { withFileTypes: true });
-  } catch {
-    return vazio("A pasta SIOP não foi encontrada. Ela precisa ficar ao lado das pastas Empreendimentos e Espelhos de vendas.");
-  }
-
-  const alvo = normalizarNome(nomeEmpreendimento);
-  const diretorios = pastasDoSiop.filter((d) => d.isDirectory());
-  const escolhida =
-    diretorios.find((d) => normalizarNome(d.name) === alvo) ??
-    diretorios.find((d) => {
-      const n = normalizarNome(d.name);
-      return n && (n.includes(alvo) || alvo.includes(n));
-    });
-  if (!escolhida) {
-    return vazio(`Não encontrei, dentro da pasta SIOP, uma pasta com o nome do empreendimento "${nomeEmpreendimento}".`);
-  }
-
-  const pastaEmp = path.join(/*turbopackIgnore: true*/ base, escolhida.name);
-  const arquivos = (await fs.readdir(pastaEmp, { withFileTypes: true })).filter(
-    (a) => a.isFile() && /\.pdf$/i.test(a.name)
-  );
-
-  // Se houver mais de um PDF da mesma unidade, vale o mais recente.
-  const porUnidade = new Map<string, { nome: string; modificado: number; total: number }>();
-  const naoReconhecidos: string[] = [];
-  for (const arq of arquivos) {
-    const info = interpretarNomeArquivo(arq.name);
-    if (!info) {
-      naoReconhecidos.push(arq.name);
-      continue;
-    }
-    const chave = `${info.unidade}|${info.torre}`;
-    const modificado = (await fs.stat(path.join(/*turbopackIgnore: true*/ pastaEmp, arq.name))).mtimeMs;
-    const atual = porUnidade.get(chave);
-    if (!atual) porUnidade.set(chave, { nome: arq.name, modificado, total: 1 });
-    else {
-      atual.total++;
-      if (modificado > atual.modificado) {
-        atual.nome = arq.name;
-        atual.modificado = modificado;
-      }
-    }
-  }
-
-  const chavesCadastradas = new Set<string>();
-
-  async function conferir(cliente: ClienteParaConferir): Promise<ResultadoUnidade> {
-    const torreIdx = indiceTorre(cliente.torre) ?? "";
-    const chave = `${normalizarUnidade(cliente.unidade)}|${torreIdx}`;
-    chavesCadastradas.add(chave);
-    const encontrado = porUnidade.get(chave);
-
-    const parcial: ResultadoUnidade = {
-      clienteId: cliente.clienteId,
-      unidade: cliente.unidade,
-      torre: cliente.torre,
-      proprietario: cliente.proprietario,
-      arquivo: encontrado?.nome ?? null,
-      situacao: "sem-pdf",
-      campos: [],
-      identificacao: null,
-      proponente: null,
-      avisos: [],
-    };
-    if (!encontrado) return parcial;
-    if (encontrado.total > 1) {
-      parcial.avisos.push(`Há ${encontrado.total} PDFs desta unidade na pasta; foi usado o mais recente.`);
-    }
-
-    let conteudo: Buffer;
-    try {
-      conteudo = await fs.readFile(path.join(/*turbopackIgnore: true*/ pastaEmp, encontrado.nome));
-    } catch {
-      return { ...parcial, situacao: "ilegivel", avisos: [...parcial.avisos, "Não foi possível ler o PDF."] };
-    }
-    return avaliarPdf(cliente, new Uint8Array(conteudo), parcial);
-  }
-
-  // Lê poucos PDFs por vez para não sobrecarregar a máquina.
-  const resultados: ResultadoUnidade[] = [];
-  for (let i = 0; i < clientes.length; i += 4) {
-    resultados.push(...(await Promise.all(clientes.slice(i, i + 4).map(conferir))));
-  }
-
-  const pdfsSemCadastro = Array.from(porUnidade.entries())
-    .filter(([chave]) => !chavesCadastradas.has(chave))
-    .map(([, v]) => v.nome)
-    .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
-
-  return {
-    pasta: base,
-    pastaDoEmpreendimento: escolhida.name,
-    erro: null,
-    resultados,
-    pdfsSemCadastro,
-    arquivosNaoReconhecidos: naoReconhecidos,
-  };
 }

@@ -46,7 +46,7 @@ export default async function ConferenciaSiopUnidadePage({ params }: { params: P
         {clienteTyped.nome ? ` · ${clienteTyped.nome}` : ""}
       </p>
       <p className="mt-2 max-w-2xl text-sm text-slate-500">
-        Escolha o PDF do SIOP dessa unidade — não precisa estar na pasta SIOP do empreendimento.
+        Escolha o PDF do SIOP dessa unidade, direto do seu computador.
         Compara o item <strong>5 - Valores da operação</strong> do PDF com o cadastro: valor do
         financiamento, FGTS e terreno.
       </p>
